@@ -10,7 +10,6 @@ import ru.severnoyesiyanieBack.entity.OrderItem
 import ru.severnoyesiyanieBack.entity.UserRole
 import ru.severnoyesiyanieBack.entity.VisitStatus
 import ru.severnoyesiyanieBack.exception.*
-import ru.severnoyesiyanieBack.repository.MenuItemRepository
 import ru.severnoyesiyanieBack.repository.OrderRepository
 import ru.severnoyesiyanieBack.repository.UserRepository
 import ru.severnoyesiyanieBack.repository.VisitRepository
@@ -21,14 +20,14 @@ class OrderService(
     private val orderRepository: OrderRepository,
     private val visitRepository: VisitRepository,
     private val userRepository: UserRepository,
-    private val menuItemRepository: MenuItemRepository
+    private val menuItemService: MenuItemService
 ) {
 
     @Transactional
     fun createOrder(request: CreateOrderRequest): OrderResponse {
 
-        val visit = visitRepository.findByIdForUpdate(request.visitId)
-            ?: throw VisitNotFoundException(request.visitId)
+        val visit = visitRepository.findById(request.visitId)
+            .orElseThrow { VisitNotFoundException(request.visitId) }
 
         if (visit.status != VisitStatus.OPEN) {
             throw VisitAlreadyClosedException(request.visitId)
@@ -40,19 +39,25 @@ class OrderService(
         val worker = userRepository.findById(request.workerId)
             .orElseThrow { UserNotFoundException(request.workerId) }
 
-// проверочка роляшек
         if (waiter.role != UserRole.WAITER) {
-            throw InvalidUserRoleException(request.waiterId, UserRole.WAITER)
+            throw InvalidUserRoleException(
+                request.waiterId,
+                UserRole.WAITER
+            )
         }
 
         if (worker.role != UserRole.WORKER) {
-            throw InvalidUserRoleException(request.workerId, UserRole.WORKER)
+            throw InvalidUserRoleException(
+                request.workerId,
+                UserRole.WORKER
+            )
         }
 
         val orderedProducts = request.items.map { item ->
 
-            val product = menuItemRepository.findById(item.menuItemId)
-                .orElseThrow { MenuItemNotFoundException(item.menuItemId) }
+            val product = menuItemService.getMenuItemEntityById(
+                item.menuItemId
+            )
 
             product to item.quantity
         }
@@ -95,6 +100,7 @@ class OrderService(
     }
 
     private fun toResponse(order: Order): OrderResponse {
+
         return OrderResponse(
             idOrder = requireNotNull(order.idOrder),
             visitId = requireNotNull(order.visit.idVisit),
@@ -107,7 +113,8 @@ class OrderService(
                     name = item.product.name,
                     quantity = item.quantity,
                     unitPrice = item.unitPrice,
-                    subtotal = item.unitPrice * BigDecimal.valueOf(item.quantity.toLong())
+                    subtotal = item.unitPrice *
+                            BigDecimal.valueOf(item.quantity.toLong())
                 )
             },
 

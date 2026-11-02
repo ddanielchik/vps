@@ -9,7 +9,6 @@ import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
 import ru.severnoyesiyanieBack.dto.CreateMenuItemRequest
 import ru.severnoyesiyanieBack.entity.MenuItem
-import ru.severnoyesiyanieBack.repository.TasteTagRepository
 import ru.severnoyesiyanieBack.dto.MenuItemResponse
 import ru.severnoyesiyanieBack.exception.MenuItemNotFoundException
 import ru.severnoyesiyanieBack.repository.MenuItemRepository
@@ -18,7 +17,7 @@ import ru.severnoyesiyanieBack.repository.MenuItemRepository
 @Service
 class MenuItemService(
     private val menuItemRepository: MenuItemRepository,
-    private val tasteTagRepository: TasteTagRepository
+    private val tasteTagService: TasteTagService
 ) {
 
     @Transactional(readOnly = true)
@@ -55,7 +54,7 @@ class MenuItemService(
     @Transactional
     fun createMenuItem(request: CreateMenuItemRequest): MenuItemResponse {
 
-        val tags = tasteTagRepository.findAllById(request.tasteTagIds).toList()
+        val tags = tasteTagService.getTagsByIds(request.tasteTagIds)
 
         if (tags.size != request.tasteTagIds.size) {
             throw ResponseStatusException(
@@ -85,7 +84,7 @@ class MenuItemService(
         val cocktail = menuItemRepository.findById(idPosition)
             .orElseThrow { MenuItemNotFoundException(idPosition) }
 
-        val tags = tasteTagRepository.findAllById(request.tasteTagIds).toList()
+        val tags = tasteTagService.getTagsByIds(request.tasteTagIds)
 
         if (tags.size != request.tasteTagIds.size) {
             throw ResponseStatusException(
@@ -113,6 +112,11 @@ class MenuItemService(
         menuItemRepository.delete(cocktail)
     }
 
+    fun getMenuItemEntityById(idPosition: Int): MenuItem {
+        return menuItemRepository.findById(idPosition)
+            .orElseThrow { MenuItemNotFoundException(idPosition) }
+    }
+
     private fun toResponse(cocktail: MenuItem): MenuItemResponse {
 
         return MenuItemResponse(
@@ -122,5 +126,22 @@ class MenuItemService(
             ingredients = requireNotNull(cocktail.ingredients),
             tasteTags = cocktail.tasteTags.map { it.name }.sorted()
         )
+    }
+
+    @Transactional(readOnly = true)
+    fun getRecommendedMenuItems(
+        preferredTastes: Set<String>
+    ): List<MenuItemResponse> {
+
+        if (preferredTastes.isEmpty()) {
+            return emptyList()
+        }
+
+        return menuItemRepository.findByTasteTags(
+            preferredTastes,
+            PageRequest.of(0, 50, Sort.by("idPosition"))
+        ).content.map { cocktail ->
+            toResponse(cocktail)
+        }
     }
 }

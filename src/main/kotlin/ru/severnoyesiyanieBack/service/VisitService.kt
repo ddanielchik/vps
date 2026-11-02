@@ -1,53 +1,60 @@
 package ru.severnoyesiyanieBack.service
 
-import org.springframework.stereotype.Service
-import ru.severnoyesiyanieBack.dto.CreateVisitRequest
-import ru.severnoyesiyanieBack.dto.VisitResponse
-import ru.severnoyesiyanieBack.entity.Visit
-import ru.severnoyesiyanieBack.exception.VisitNotFoundException
-import ru.severnoyesiyanieBack.exception.UserNotFoundException
-import ru.severnoyesiyanieBack.repository.VisitRepository
-import ru.severnoyesiyanieBack.repository.UserRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
-import org.springframework.web.server.ResponseStatusException
+import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
+import org.springframework.web.server.ResponseStatusException
+import ru.severnoyesiyanieBack.dto.CreateVisitRequest
 import ru.severnoyesiyanieBack.dto.UpdateVisitRequest
-import ru.severnoyesiyanieBack.entity.VisitStatus
-import ru.severnoyesiyanieBack.exception.VisitAlreadyClosedException
-import java.time.LocalDateTime
 import ru.severnoyesiyanieBack.dto.VisitPreferencesRequest
+import ru.severnoyesiyanieBack.dto.VisitResponse
+import ru.severnoyesiyanieBack.entity.Visit
+import ru.severnoyesiyanieBack.entity.VisitStatus
 import ru.severnoyesiyanieBack.exception.TasteTagsNotFoundException
-import ru.severnoyesiyanieBack.repository.TasteTagRepository
+import ru.severnoyesiyanieBack.exception.VisitAlreadyClosedException
+import ru.severnoyesiyanieBack.exception.VisitNotFoundException
+import ru.severnoyesiyanieBack.repository.VisitRepository
+import java.time.LocalDateTime
 
 @Service
 class VisitService(
     private val visitRepository: VisitRepository,
-    private val userRepository: UserRepository,
-    private val tasteTagRepository: TasteTagRepository
+    private val userService: UserService,
+    private val tasteTagService: TasteTagService
 ) {
 
+    @Transactional(readOnly = true)
     fun getVisitById(id: Int): VisitResponse {
-        val visit = visitRepository.findById(id).orElseThrow { VisitNotFoundException(id) }
+
+        val visit = visitRepository.findById(id)
+            .orElseThrow { VisitNotFoundException(id) }
+
         return toResponse(visit)
     }
 
+    @Transactional
     fun openVisit(request: CreateVisitRequest): VisitResponse {
 
-        val user = userRepository.findById(request.clientId).orElseThrow { UserNotFoundException(request.clientId) }
+        val user = userService.getUserEntityById(request.clientId)
 
         val visit = Visit(
             user = user,
             tableNumber = request.tableNumber
         )
+
         val savedVisit = visitRepository.save(visit)
+
         return toResponse(savedVisit)
     }
 
     @Transactional
-    fun updateVisit(id: Int, request: UpdateVisitRequest): VisitResponse {
+    fun updateVisit(
+        id: Int,
+        request: UpdateVisitRequest
+    ): VisitResponse {
 
         val visit = visitRepository.findById(id)
             .orElseThrow { VisitNotFoundException(id) }
@@ -62,9 +69,16 @@ class VisitService(
     }
 
     @Transactional(readOnly = true)
-    fun getAllVisits(page: Int, size: Int): Page<VisitResponse> {
+    fun getAllVisits(
+        page: Int,
+        size: Int
+    ): Page<VisitResponse> {
+
         if (page < 0) {
-            throw ResponseStatusException(HttpStatus.BAD_REQUEST, "Page must be non-negative")
+            throw ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "Page must be non-negative"
+            )
         }
 
         val pageable = PageRequest.of(
@@ -79,8 +93,9 @@ class VisitService(
 
     @Transactional
     fun closeVisit(id: Int): VisitResponse {
-        val visit = visitRepository.findByIdForUpdate(id)
-            ?: throw VisitNotFoundException(id)
+
+        val visit = visitRepository.findById(id)
+            .orElseThrow { VisitNotFoundException(id) }
 
         if (visit.status != VisitStatus.OPEN) {
             throw VisitAlreadyClosedException(id)
@@ -92,17 +107,21 @@ class VisitService(
 
         return toResponse(visitRepository.save(visit))
     }
-    @Transactional
-    fun updateTastePreferences(id: Int, request: VisitPreferencesRequest): VisitResponse {
 
-        val visit = visitRepository.findByIdForUpdate(id)
-            ?: throw VisitNotFoundException(id)
+    @Transactional
+    fun updateTastePreferences(
+        id: Int,
+        request: VisitPreferencesRequest
+    ): VisitResponse {
+
+        val visit = visitRepository.findById(id)
+            .orElseThrow { VisitNotFoundException(id) }
 
         if (visit.status != VisitStatus.OPEN) {
             throw VisitAlreadyClosedException(id)
         }
 
-        val tags = tasteTagRepository.findAllById(request.tasteTagIds)
+        val tags = tasteTagService.getTagsByIds(request.tasteTagIds)
 
         if (tags.size != request.tasteTagIds.size) {
             throw TasteTagsNotFoundException()
@@ -114,9 +133,8 @@ class VisitService(
         return toResponse(visitRepository.save(visit))
     }
 
-
-
     private fun toResponse(visit: Visit): VisitResponse {
+
         return VisitResponse(
             idVisit = requireNotNull(visit.idVisit),
             clientId = requireNotNull(visit.user.idUser),
@@ -127,6 +145,4 @@ class VisitService(
             tastePreferences = visit.tastePreferences.map { it.name }
         )
     }
-
-
 }

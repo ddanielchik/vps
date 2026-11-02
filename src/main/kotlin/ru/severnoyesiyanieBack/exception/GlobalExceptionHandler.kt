@@ -23,7 +23,7 @@ class GlobalExceptionHandler {
             .status(HttpStatus.CONFLICT)
         .body(ErrorResponse(message = exception.message ?: "User already exists"))
     }
-    // валидация входных данных
+
     @ExceptionHandler(MethodArgumentNotValidException::class)
     fun handleValidationException(exception: MethodArgumentNotValidException): ResponseEntity<ErrorResponse> {
         val message = exception.bindingResult.fieldErrors.firstOrNull()?.defaultMessage?:"Validation error"

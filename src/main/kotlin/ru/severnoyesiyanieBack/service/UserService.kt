@@ -1,4 +1,5 @@
 package ru.severnoyesiyanieBack.service
+
 import org.springframework.transaction.annotation.Transactional
 import ru.severnoyesiyanieBack.dto.UpdateUserRequest
 import org.springframework.stereotype.Service
@@ -13,12 +14,11 @@ import ru.severnoyesiyanieBack.exception.UserNotFoundException
 import ru.severnoyesiyanieBack.repository.UserRepository
 
 @Service
-class UserService (
+class UserService(
     private val userRepository: UserRepository
-
 ) {
     fun createUser(createUserRequest: CreateUserRequest): UserResponse {
-        if (userRepository.existsByEmail(createUserRequest.email)){
+        if (userRepository.existsByEmail(createUserRequest.email)) {
             throw UserAlreadyExistsException(createUserRequest.email)
         }
         val user = User(
@@ -34,6 +34,7 @@ class UserService (
             role = savedUser.role,
         )
     }
+
     fun getUserById(userId: Int): UserResponse {
         val user = userRepository.findById(userId).orElseThrow { UserNotFoundException(userId) }
         return UserResponse(
@@ -43,8 +44,9 @@ class UserService (
             role = user.role
         )
     }
+
     @Transactional
-    fun updateUser(userId: Int, request: UpdateUserRequest ): UserResponse {
+    fun updateUser(userId: Int, request: UpdateUserRequest): UserResponse {
         val user = userRepository.findById(userId)
             .orElseThrow { UserNotFoundException(userId) }
 
@@ -66,9 +68,15 @@ class UserService (
             role = updatedUser.role
         )
     }
+
     @Transactional
-    fun deleteUser(userId: Int){
+    fun deleteUser(userId: Int) {
         val user = userRepository.findById(userId).orElseThrow { UserNotFoundException(userId) }
         userRepository.delete(user)
     }
+
+    fun getUserEntityById(userId: Int): User {
+        return userRepository.findById(userId)
+            .orElseThrow { UserNotFoundException(userId) }
     }
+}

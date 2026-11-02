@@ -13,8 +13,8 @@ import ru.severnoyesiyanieBack.dto.UpdateUserRequest
 import ru.severnoyesiyanieBack.dto.UserResponse
 import ru.severnoyesiyanieBack.service.UserService
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.DeleteMapping
-import org.springframework.web.bind.annotation.ResponseStatus
 
 
 @RestController
@@ -22,27 +22,26 @@ import org.springframework.web.bind.annotation.ResponseStatus
 class UserController(private val userService: UserService) {
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
     fun createUser(
         @Valid @RequestBody createUserRequest: CreateUserRequest
-    ): UserResponse {
-        return userService.createUser(createUserRequest)
+    ): ResponseEntity<UserResponse> {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.createUser(createUserRequest))
     }
 
     @GetMapping("/{userId}")
-    fun getUserById(@PathVariable userId: Int): UserResponse {
-        return userService.getUserById(userId)
+    fun getUserById(@PathVariable userId: Int): ResponseEntity<UserResponse> {
+        return ResponseEntity.ok(userService.getUserById(userId))
 
     }
     @PutMapping("/{userId}")
-        fun updateUser(@PathVariable userId: Int, @Valid @RequestBody updateUserRequest: UpdateUserRequest): UserResponse {
-            return userService.updateUser(userId, updateUserRequest)
+        fun updateUser(@PathVariable userId: Int, @Valid @RequestBody updateUserRequest: UpdateUserRequest): ResponseEntity<UserResponse> {
+            return ResponseEntity.ok(userService.updateUser(userId, updateUserRequest))
     }
 
     @DeleteMapping("/{userId}")
-    @ResponseStatus(HttpStatus.NO_CONTENT)
-    fun deleteUserById(@PathVariable userId: Int) {
+    fun deleteUserById(@PathVariable userId: Int): ResponseEntity<Void> {
         userService.deleteUser(userId)
+        return ResponseEntity.noContent().build()
     }
 
 

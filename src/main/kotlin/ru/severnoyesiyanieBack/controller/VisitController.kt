@@ -17,16 +17,15 @@ import ru.severnoyesiyanieBack.dto.MenuItemResponse
 class VisitController(private val visitService: VisitService, private val recommendationService: RecommendationService) {
 
     @GetMapping("/{id}")
-    fun getVisitById(@PathVariable id: Int): VisitResponse {
-        return visitService.getVisitById(id)
+    fun getVisitById(@PathVariable id: Int): ResponseEntity<VisitResponse> {
+        return ResponseEntity.ok(visitService.getVisitById(id))
     }
 
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
     fun openVisit(
         @Valid @RequestBody request: CreateVisitRequest
-    ): VisitResponse {
-        return visitService.openVisit(request)
+    ): ResponseEntity<VisitResponse> {
+        return ResponseEntity.status(HttpStatus.CREATED).body(visitService.openVisit(request))
     }
 
     @GetMapping
@@ -46,25 +45,25 @@ class VisitController(private val visitService: VisitService, private val recomm
     fun updateTableNumber(
         @PathVariable id: Int,
         @Valid @RequestBody request: UpdateVisitRequest
-    ): VisitResponse {
-        return visitService.updateVisit(id, request)
+    ): ResponseEntity<VisitResponse> {
+        return ResponseEntity.ok(visitService.updateVisit(id, request))
     }
 
     @PutMapping("/{id}/preferences")
     fun updateTastePreferences(
         @PathVariable id: Int,
         @Valid @RequestBody request: VisitPreferencesRequest
-    ): VisitResponse {
-        return visitService.updateTastePreferences(id, request)
+    ): ResponseEntity<VisitResponse> {
+        return ResponseEntity.ok(visitService.updateTastePreferences(id, request))
     }
 
     @PostMapping("/{id}/close")
-    fun closeVisit(@PathVariable id: Int): VisitResponse {
-        return visitService.closeVisit(id)
+    fun closeVisit(@PathVariable id: Int): ResponseEntity<VisitResponse> {
+        return ResponseEntity.ok(visitService.closeVisit(id))
     }
 
     @GetMapping("/{id}/recommendations")
-    fun getRecommendations(@PathVariable id: Int): List<MenuItemResponse> {
-        return recommendationService.getRecommendations(id)
+    fun getRecommendations(@PathVariable id: Int): ResponseEntity<List<MenuItemResponse>> {
+        return ResponseEntity.ok(recommendationService.getRecommendations(id))
     }
 }
