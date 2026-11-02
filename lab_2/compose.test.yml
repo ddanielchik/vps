@@ -1,0 +1,16 @@
+services:
+  tests:
+    image: maven:3.9-eclipse-temurin-21
+    working_dir: /workspace
+    command: mvn -B -ntp clean verify
+    volumes:
+      - .:/workspace
+      - test-maven-cache:/root/.m2
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  test-maven-cache:
