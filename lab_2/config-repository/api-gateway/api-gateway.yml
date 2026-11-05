@@ -1,0 +1,55 @@
+server:
+  port: 8080
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: reference-deletions
+              uri: lb://visit-order-service
+              predicates:
+                - Path=/api/users/{id},/api/menu/{id}
+                - Method=DELETE
+            - id: users
+              uri: lb://user-service
+              predicates:
+                - Path=/api/users,/api/users/**
+                - Method=GET,POST,PUT
+            - id: menu
+              uri: lb://menu-service
+              predicates:
+                - Path=/api/menu,/api/menu/**
+                - Method=GET,POST,PUT
+            - id: visits-orders
+              uri: lb://visit-order-service
+              predicates:
+                - Path=/api/visits,/api/visits/**,/api/orders,/api/orders/**
+            - id: users-openapi
+              uri: lb://user-service
+              predicates:
+                - Path=/openapi/users
+              filters:
+                - SetPath=/v3/api-docs
+            - id: menu-openapi
+              uri: lb://menu-service
+              predicates:
+                - Path=/openapi/menu
+              filters:
+                - SetPath=/v3/api-docs
+            - id: visits-orders-openapi
+              uri: lb://visit-order-service
+              predicates:
+                - Path=/openapi/visits-orders
+              filters:
+                - SetPath=/v3/api-docs
+springdoc:
+  swagger-ui:
+    disable-swagger-default-url: true
+    urls:
+      - name: Пользователи
+        url: /openapi/users
+      - name: Меню
+        url: /openapi/menu
+      - name: Посещения и заказы
+        url: /openapi/visits-orders

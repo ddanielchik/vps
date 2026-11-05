@@ -1,0 +1,11 @@
+server:
+  port: 8081
+spring:
+  r2dbc:
+    url: ${R2DBC_URL:r2dbc:postgresql://localhost:5432/users}
+    username: ${DB_USERNAME:users}
+    password: ${DB_PASSWORD:users}
+  flyway:
+    url: ${JDBC_URL:jdbc:postgresql://localhost:5432/users}
+    user: ${DB_USERNAME:users}
+    password: ${DB_PASSWORD:users}
