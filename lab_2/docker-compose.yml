@@ -1,40 +1,181 @@
+x-app-environment: &app-environment
+  CONFIG_SERVER_URL: http://config-service:8888
+  EUREKA_URL: http://discovery-service:8761/eureka/
+  JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:ActiveProcessorCount=2
+
+x-app-health: &app-health
+  interval: 10s
+  timeout: 5s
+  start_period: 60s
+  retries: 20
+
 services:
-  postgres:
+  users-db:
     image: postgres:17
-    container_name: severnoyesiyanie-postgres
-
     environment:
-      POSTGRES_DB: severnoyesiyanie
-      POSTGRES_USER: severnoyesiyanie
-      POSTGRES_PASSWORD: severnoyesiyanie
-
-    ports:
-      - "5432:5432"
-
+      POSTGRES_DB: users
+      POSTGRES_USER: users
+      POSTGRES_PASSWORD: ${USERS_DB_PASSWORD:-users}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-
+      - users-data:/var/lib/postgresql/data
+    networks: [users-data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U severnoyesiyanie -d severnoyesiyanie"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
 
-  app:
-    build: .
-    container_name: severnoyesiyanie-backend
-
-    ports:
-      - "8080:8080"
-
+  menu-db:
+    image: postgres:17
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/severnoyesiyanie
-      SPRING_DATASOURCE_USERNAME: severnoyesiyanie
-      SPRING_DATASOURCE_PASSWORD: severnoyesiyanie
+      POSTGRES_DB: menu
+      POSTGRES_USER: menu
+      POSTGRES_PASSWORD: ${MENU_DB_PASSWORD:-menu}
+    volumes:
+      - menu-data:/var/lib/postgresql/data
+    networks: [menu-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
+  visits-db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: visits
+      POSTGRES_USER: visits
+      POSTGRES_PASSWORD: ${VISITS_DB_PASSWORD:-visits}
+    volumes:
+      - visits-data:/var/lib/postgresql/data
+    networks: [visits-data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  config-service:
+    build:
+      context: .
+      args: {MODULE: config-service}
+    environment:
+      EUREKA_URL: http://discovery-service:8761/eureka/
+      CONFIG_REPOSITORY: /config
+      EUREKA_HOSTNAME: config-service
+      JAVA_TOOL_OPTIONS: -Xms64m -Xmx256m -XX:ActiveProcessorCount=2
+    volumes:
+      - ./config-repository:/config:ro
+    networks: [backend]
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8888/discovery-service/default"]
+
+  discovery-service:
+    build:
+      context: .
+      args: {MODULE: discovery-service}
+    environment:
+      <<: *app-environment
+      EUREKA_HOSTNAME: discovery-service
+    ports:
+      - "${EUREKA_PORT:-8761}:8761"
+    networks: [edge, backend]
     depends_on:
-      postgres:
-        condition: service_healthy
+      config-service: {condition: service_healthy}
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8761/actuator/health"]
+
+  user-service:
+    build:
+      context: .
+      args: {MODULE: user-service}
+    environment:
+      <<: *app-environment
+      EUREKA_HOSTNAME: user-service
+      DB_USERNAME: users
+      DB_PASSWORD: ${USERS_DB_PASSWORD:-users}
+      R2DBC_URL: r2dbc:postgresql://users-db:5432/users
+      JDBC_URL: jdbc:postgresql://users-db:5432/users
+    networks: [backend, users-data]
+    depends_on:
+      config-service: {condition: service_healthy}
+      discovery-service: {condition: service_healthy}
+      users-db: {condition: service_healthy}
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/actuator/health"]
+
+  menu-service:
+    build:
+      context: .
+      args: {MODULE: menu-service}
+    environment:
+      <<: *app-environment
+      EUREKA_HOSTNAME: menu-service
+      DB_USERNAME: menu
+      DB_PASSWORD: ${MENU_DB_PASSWORD:-menu}
+      DB_URL: jdbc:postgresql://menu-db:5432/menu
+    networks: [backend, menu-data]
+    depends_on:
+      config-service: {condition: service_healthy}
+      discovery-service: {condition: service_healthy}
+      menu-db: {condition: service_healthy}
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8082/actuator/health"]
+
+  visit-order-service:
+    build:
+      context: .
+      args: {MODULE: visit-order-service}
+    environment:
+      <<: *app-environment
+      EUREKA_HOSTNAME: visit-order-service
+      DB_USERNAME: visits
+      DB_PASSWORD: ${VISITS_DB_PASSWORD:-visits}
+      DB_URL: jdbc:postgresql://visits-db:5432/visits
+    networks: [backend, visits-data]
+    depends_on:
+      config-service: {condition: service_healthy}
+      discovery-service: {condition: service_healthy}
+      visits-db: {condition: service_healthy}
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8083/actuator/health"]
+
+  api-gateway:
+    build:
+      context: .
+      args: {MODULE: api-gateway}
+    environment:
+      <<: *app-environment
+      EUREKA_HOSTNAME: api-gateway
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    networks: [edge, backend]
+    depends_on:
+      discovery-service: {condition: service_healthy}
+      user-service: {condition: service_healthy}
+      menu-service: {condition: service_healthy}
+      visit-order-service: {condition: service_healthy}
+    healthcheck:
+      <<: *app-health
+      test: ["CMD", "curl", "-fsS", "http://localhost:8080/actuator/health"]
+
+networks:
+  edge:
+  backend:
+    internal: true
+  users-data:
+    internal: true
+  menu-data:
+    internal: true
+  visits-data:
+    internal: true
 
 volumes:
-  postgres-data:
+  users-data:
+  menu-data:
+  visits-data:
