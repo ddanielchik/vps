@@ -2,7 +2,7 @@ services:
   tests:
     image: maven:3.9-eclipse-temurin-21
     working_dir: /workspace
-    command: mvn -B -ntp clean verify
+    command: ./mvnw -B -ntp clean verify -Dkotlin.compiler.daemon=false
     volumes:
       - .:/workspace
       - test-maven-cache:/root/.m2
