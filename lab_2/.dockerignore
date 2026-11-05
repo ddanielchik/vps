@@ -6,7 +6,6 @@
 .env
 *.log
 README.md
-scripts/
 config-repository/
 .env.example
 docker-compose.yml
