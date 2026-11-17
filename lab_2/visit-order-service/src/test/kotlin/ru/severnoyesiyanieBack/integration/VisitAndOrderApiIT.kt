@@ -190,7 +190,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.totalAmount").value(550.7)))
         val savedItem = savedOrder["items"].single { it["menuItemId"].asInt() == first }
-        assertEquals("Updated name", savedItem["name"].asString())
+        assertEquals("Northern Lights", savedItem["name"].asString())
         assertEquals(0, BigDecimal("125.50").compareTo(savedItem["unitPrice"].decimalValue()))
         assertEquals(0, BigDecimal("251.00").compareTo(savedItem["subtotal"].decimalValue()))
         assertEquals(BigDecimal("125.50"), jdbc.queryForObject("SELECT unit_price FROM order_items WHERE id_product = ?", BigDecimal::class.java, first))

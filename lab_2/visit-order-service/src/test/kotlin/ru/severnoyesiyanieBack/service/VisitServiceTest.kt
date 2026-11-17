@@ -80,9 +80,19 @@ class VisitServiceTest {
         service = VisitService(
             visitRepository,
             userClient,
-            menuClient,
-            mock(ReferenceLock::class.java)
+            menuClient
         )
+    }
+
+    @Test
+    fun `blocked client cannot open a visit`() {
+        doReturn(client.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED))
+            .`when`(userClient).getUser(client.idUser)
+        val error = assertThrows(ResponseStatusException::class.java) {
+            service.openVisit(CreateVisitRequest(client.idUser, 1))
+        }
+        assertEquals(HttpStatus.CONFLICT, error.statusCode)
+        verifyNoInteractions(visitRepository)
     }
 
     @Test

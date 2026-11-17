@@ -69,23 +69,17 @@ class RemoteServicesStub : AutoCloseable {
                     else users[id]?.let { reply(exchange, 200, it) }
                         ?: reply(exchange, 404, mapOf("message" to "User $id not found"))
                 }
-                path.startsWith("/internal/users/") && exchange.requestMethod == "DELETE" -> {
-                    if (users.remove(id) != null) reply(exchange, 204) else reply(exchange, 404, mapOf("message" to "User $id not found"))
-                }
-                path.startsWith("/api/menu/") -> menu[id]?.let { reply(exchange, 200, it) }
+                path.startsWith("/api/menu/") && id >= 0 -> menu[id]?.let { reply(exchange, 200, it) }
                     ?: reply(exchange, 404, mapOf("message" to "Cocktail $id not found"))
-                path == "/internal/menu/tags" -> {
+                path == "/api/menu/tags" -> {
                     val ids = query(exchange, "ids").map(String::toInt).toSet()
                     val selected = tags.filter { it.idTag in ids }
                     if (selected.size == ids.size) reply(exchange, 200, selected)
                     else reply(exchange, 400, "Some specified taste tags were not found")
                 }
-                path == "/internal/menu/recommendations" -> {
+                path == "/api/menu/recommendations" -> {
                     requestedTastes = query(exchange, "tastes").toSet()
                     reply(exchange, 200, recommendations)
-                }
-                path.startsWith("/internal/menu/") && exchange.requestMethod == "DELETE" -> {
-                    if (menu.remove(id) != null) reply(exchange, 204) else reply(exchange, 404, mapOf("message" to "Cocktail $id not found"))
                 }
                 else -> reply(exchange, 404, "Unknown test endpoint")
             }

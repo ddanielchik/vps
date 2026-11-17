@@ -15,6 +15,7 @@ import ru.severnoyesiyanieBack.entity.Visit
 import ru.severnoyesiyanieBack.entity.TastePreference
 import ru.severnoyesiyanieBack.client.UserClient
 import ru.severnoyesiyanieBack.client.MenuClient
+import ru.severnoyesiyanieBack.entity.UserStatus
 import ru.severnoyesiyanieBack.entity.VisitStatus
 import ru.severnoyesiyanieBack.exception.TasteTagsNotFoundException
 import ru.severnoyesiyanieBack.exception.VisitAlreadyClosedException
@@ -26,8 +27,7 @@ import java.time.LocalDateTime
 class VisitService(
     private val visitRepository: VisitRepository,
     private val userClient: UserClient,
-    private val menuClient: MenuClient,
-    private val referenceLock: ReferenceLock
+    private val menuClient: MenuClient
 ) {
 
     @Transactional(readOnly = true)
@@ -42,8 +42,10 @@ class VisitService(
     @Transactional
     fun openVisit(request: CreateVisitRequest): VisitResponse {
 
-        referenceLock.acquire(ReferenceLock.Kind.USER, listOf(request.clientId), shared = true)
-        userClient.getUser(request.clientId)
+        val client = userClient.getUser(request.clientId)
+        if (client.status == UserStatus.BLOCKED) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "Blocked users cannot open visits")
+        }
 
         val visit = Visit(
             clientId = request.clientId,
@@ -138,16 +140,13 @@ class VisitService(
         return toResponse(visitRepository.save(visit))
     }
 
-    private fun toResponse(visit: Visit): VisitResponse {
-
-        return VisitResponse(
-            idVisit = requireNotNull(visit.idVisit),
-            clientId = visit.clientId,
-            tableNumber = visit.tableNumber,
-            openedAt = visit.openedAt,
-            closedAt = visit.closedAt,
-            status = visit.status,
-            tastePreferences = visit.tastePreferences.map { it.name }
-        )
-    }
+    private fun toResponse(visit: Visit): VisitResponse = VisitResponse.Builder()
+        .idVisit(requireNotNull(visit.idVisit))
+        .clientId(visit.clientId)
+        .tableNumber(visit.tableNumber)
+        .openedAt(visit.openedAt)
+        .closedAt(visit.closedAt)
+        .status(visit.status)
+        .tastePreferences(visit.tastePreferences.map { it.name })
+        .build()
 }

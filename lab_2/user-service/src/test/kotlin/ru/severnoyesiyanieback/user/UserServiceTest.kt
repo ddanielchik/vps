@@ -11,6 +11,11 @@ import org.springframework.dao.DuplicateKeyException
 import org.springframework.transaction.ReactiveTransaction
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.TransactionDefinition
+import reactor.core.publisher.Flux
+import ru.severnoyesiyanieback.user.client.VisitOrderClient
+import ru.severnoyesiyanieback.user.entity.UserStatus
+import org.springframework.web.server.ResponseStatusException
+import org.springframework.http.HttpStatus
 import reactor.core.publisher.Mono
 import reactor.test.StepVerifier
 import ru.severnoyesiyanieback.user.dto.CreateUserRequest
@@ -24,6 +29,7 @@ import ru.severnoyesiyanieback.user.repository.UserRepository
 import ru.severnoyesiyanieback.user.service.UserService
 
 class UserServiceTest {
+    private val visits = mock(VisitOrderClient::class.java)
     private val repository = mock(UserRepository::class.java)
     private val transactionManager = mock(ReactiveTransactionManager::class.java)
     private val transaction = mock(ReactiveTransaction::class.java)
@@ -34,7 +40,7 @@ class UserServiceTest {
             .getReactiveTransaction(any(TransactionDefinition::class.java))
         doReturn(Mono.empty<Void>()).`when`(transactionManager).commit(transaction)
         doReturn(Mono.empty<Void>()).`when`(transactionManager).rollback(transaction)
-        service = UserService(repository, transactionManager)
+        service = UserService(repository, visits, transactionManager)
     }
 
     @Test
@@ -129,10 +135,45 @@ class UserServiceTest {
     }
 
     @Test
-    fun `missing delete rolls back`() {
+    fun `missing delete does not call other services`() {
         doReturn(Mono.empty<User>()).`when`(repository).findById(404)
         StepVerifier.create(service.deleteUser(404)).expectError(UserNotFoundException::class.java).verify()
-        verify(transactionManager).rollback(transaction)
+        verifyNoInteractions(visits, transactionManager)
+    }
+
+    @Test
+    fun `get all returns both active and blocked users`() {
+        val active = user()
+        val blocked = user().copy(idUser = 8, status = UserStatus.BLOCKED)
+        doReturn(Flux.just(active, blocked)).`when`(repository).findAll()
+        val result = service.getAllUsers()
+        verifyNoInteractions(repository)
+        StepVerifier.create(result)
+            .expectNextMatches { it.idUser == 7 && it.status == UserStatus.ACTIVE }
+            .expectNextMatches { it.idUser == 8 && it.status == UserStatus.BLOCKED }
+            .verifyComplete()
+    }
+
+    @Test
+    fun `status can be changed and is preserved when omitted`() {
+        val original = user().copy(status = UserStatus.BLOCKED)
+        doReturn(Mono.just(original)).`when`(repository).findById(7)
+        doReturn(Mono.just(original)).`when`(repository).save(original)
+        StepVerifier.create(service.updateUser(7, UpdateUserRequest(original.name, original.email)))
+            .expectNextMatches { it.status == UserStatus.BLOCKED }.verifyComplete()
+        val active = original.copy(status = UserStatus.ACTIVE)
+        doReturn(Mono.just(active)).`when`(repository).save(active)
+        StepVerifier.create(service.updateUser(7, UpdateUserRequest(original.name, original.email, UserStatus.ACTIVE)))
+            .expectNextMatches { it.status == UserStatus.ACTIVE }.verifyComplete()
+    }
+
+    @Test
+    fun `referenced user cannot be deleted`() {
+        doReturn(Mono.just(user())).`when`(repository).findById(7)
+        doReturn(true).`when`(visits).isUserInUse(7)
+        StepVerifier.create(service.deleteUser(7))
+            .expectErrorMatches { it is ResponseStatusException && it.statusCode == HttpStatus.CONFLICT }.verify()
+        verify(repository, org.mockito.Mockito.never()).delete(user())
     }
 
     private fun user(role: UserRole = UserRole.CLIENT) =

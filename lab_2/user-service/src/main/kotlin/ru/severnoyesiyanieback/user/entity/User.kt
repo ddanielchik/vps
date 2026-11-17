@@ -1,3 +1,4 @@
+
 package ru.severnoyesiyanieback.user.entity
 
 import jakarta.validation.constraints.Email
@@ -9,11 +10,19 @@ import org.springframework.data.relational.core.mapping.Table
 
 @Table("users")
 data class User(
-    @Id @Column("id_user")
+    @Id
+    @Column("id_user")
     val idUser: Int? = null,
-    @field:NotBlank @field:Size(max = 50)
+
+    @field:NotBlank
+    @field:Size(max = 50)
     val name: String,
-    @field:NotBlank @field:Email @field:Size(max = 100)
+
+    @field:NotBlank
+    @field:Email
+    @field:Size(max = 100)
     val email: String,
-    val role: UserRole = UserRole.CLIENT
+
+    val role: UserRole = UserRole.CLIENT,
+    val status: UserStatus = UserStatus.ACTIVE
 )

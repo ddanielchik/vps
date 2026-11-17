@@ -6,21 +6,16 @@ spring:
       server:
         webflux:
           routes:
-            - id: reference-deletions
-              uri: lb://visit-order-service
-              predicates:
-                - Path=/api/users/{id},/api/menu/{id}
-                - Method=DELETE
             - id: users
               uri: lb://user-service
               predicates:
                 - Path=/api/users,/api/users/**
-                - Method=GET,POST,PUT
+                - Method=GET,POST,PUT,DELETE
             - id: menu
               uri: lb://menu-service
               predicates:
                 - Path=/api/menu,/api/menu/**
-                - Method=GET,POST,PUT
+                - Method=GET,POST,PUT,DELETE
             - id: visits-orders
               uri: lb://visit-order-service
               predicates:

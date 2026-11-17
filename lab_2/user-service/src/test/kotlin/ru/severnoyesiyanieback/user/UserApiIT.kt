@@ -34,6 +34,9 @@ import java.time.Duration
     properties = ["spring.config.name=application-test", "spring.cloud.config.enabled=false", "eureka.client.enabled=false"]
 )
 class UserApiIT {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private lateinit var visits: ru.severnoyesiyanieback.user.client.VisitOrderClient
+
     @Autowired private lateinit var environment: Environment
     @Autowired private lateinit var repository: UserRepository
     @Autowired private lateinit var service: UserService
@@ -57,7 +60,7 @@ class UserApiIT {
         client.put().uri("/api/users/${created.idUser}").bodyValue(UpdateUserRequest("Renamed", "new@example.com"))
             .exchange().expectStatus().isOk.expectBody().jsonPath("$.name").isEqualTo("Renamed")
             .jsonPath("$.email").isEqualTo("new@example.com").jsonPath("$.role").isEqualTo("CLIENT")
-        client.delete().uri("/internal/users/${created.idUser}").exchange().expectStatus().isNoContent
+        client.delete().uri("/api/users/${created.idUser}").exchange().expectStatus().isNoContent
         client.get().uri("/api/users/${created.idUser}").exchange().expectStatus().isNotFound
     }
 
@@ -80,7 +83,7 @@ class UserApiIT {
             .expectBody().jsonPath("$.message").isEqualTo("User with id 2147483647 does not exist")
         client.put().uri("/api/users/2147483647").bodyValue(UpdateUserRequest("Anna", "anna@example.com"))
             .exchange().expectStatus().isNotFound
-        client.delete().uri("/internal/users/2147483647").exchange().expectStatus().isNotFound
+        client.delete().uri("/api/users/2147483647").exchange().expectStatus().isNotFound
     }
 
     @Test
@@ -128,10 +131,10 @@ class UserApiIT {
     }
 
     @Test
-    fun `OpenAPI uses the gateway origin and hides internal deletion`() {
+    fun `OpenAPI uses the gateway origin and exposes deletion`() {
         val body = client.get().uri("/v3/api-docs").exchange().expectStatus().isOk.expectBody(String::class.java)
             .returnResult().responseBody!!
-        assertFalse(body.contains("/internal/users"))
+        org.junit.jupiter.api.Assertions.assertTrue(body.contains("/api/users"))
         client.get().uri("/v3/api-docs").exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.servers[0].url").isEqualTo("/")
     }

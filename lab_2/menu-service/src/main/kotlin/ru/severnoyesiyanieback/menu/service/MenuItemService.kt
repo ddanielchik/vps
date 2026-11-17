@@ -4,6 +4,8 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Slice
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
+import ru.severnoyesiyanieback.menu.client.VisitOrderClient
+import feign.FeignException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -25,6 +27,7 @@ import ru.severnoyesiyanieback.menu.repository.TasteTagRepository
 class MenuItemService(
     private val menuItemRepository: MenuItemRepository,
     private val tasteTagRepository: TasteTagRepository,
+    private val visitOrderClient: VisitOrderClient,
     transactionManager: PlatformTransactionManager
 ) {
     private val writeTransaction = TransactionTemplate(transactionManager)
@@ -61,9 +64,17 @@ class MenuItemService(
         toResponse(menuItemRepository.save(item))
     }
 
-    fun deleteMenuItem(idPosition: Int): Mono<Void> = inTransaction {
-        menuItemRepository.delete(findItem(idPosition))
-    }.then()
+    fun deleteMenuItem(idPosition: Int): Mono<Void> = getMenuItemById(idPosition).flatMap {
+        Mono.fromCallable { visitOrderClient.hasMenuItemsWithoutName(idPosition) }
+            .subscribeOn(Schedulers.boundedElastic())
+            .onErrorMap(FeignException::class.java) {
+                ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot check menu references", it)
+            }
+            .flatMap { inUse ->
+                if (inUse) Mono.error(ResponseStatusException(HttpStatus.CONFLICT, "Read older orders first to preserve this menu item name"))
+                else inTransaction { menuItemRepository.delete(findItem(idPosition)) }.then()
+            }
+    }
 
     fun getTagsByIds(ids: Set<Int>): Flux<TasteTagResponse> = inTransaction(readOnly = true) {
         findTags(ids).map { TasteTagResponse(requireNotNull(it.idTag), it.name) }.sortedBy { it.idTag }
@@ -90,15 +101,14 @@ class MenuItemService(
         return tags
     }
 
-    private fun toResponse(item: MenuItem) = MenuItemResponse(
-        idPosition = requireNotNull(item.idPosition),
-        name = item.name,
-        price = item.price,
-        ingredients = requireNotNull(item.ingredients),
-        tasteTags = item.tasteTags.map { it.name }.sorted()
-    )
+    private fun toResponse(item: MenuItem) = MenuItemResponse.Builder()
+        .idPosition(requireNotNull(item.idPosition))
+        .name(item.name)
+        .price(item.price)
+        .ingredients(requireNotNull(item.ingredients))
+        .tasteTags(item.tasteTags.map { it.name }.sorted())
+        .build()
 
-    // JPA's thread-bound transaction starts after subscription, on the blocking worker.
     private fun <T : Any> inTransaction(readOnly: Boolean = false, action: () -> T): Mono<T> =
         Mono.fromCallable {
             val transaction = if (readOnly) readTransaction else writeTransaction

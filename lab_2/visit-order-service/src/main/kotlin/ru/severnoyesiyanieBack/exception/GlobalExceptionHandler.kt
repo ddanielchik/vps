@@ -28,10 +28,6 @@ class GlobalExceptionHandler {
     fun handleConflict(exception: RuntimeException): ResponseEntity<String> =
         ResponseEntity.status(HttpStatus.CONFLICT).body(exception.message)
 
-    @ExceptionHandler(ResourceInUseException::class)
-    fun handleResourceInUse(exception: ResourceInUseException): ResponseEntity<ErrorResponse> =
-        ResponseEntity.status(HttpStatus.CONFLICT).body(ErrorResponse(exception.message ?: "Resource is in use"))
-
     @ExceptionHandler(TasteTagsNotFoundException::class)
     fun handleMissingTags(exception: TasteTagsNotFoundException): ResponseEntity<String> =
         ResponseEntity.badRequest().body(exception.message)

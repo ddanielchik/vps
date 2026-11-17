@@ -12,7 +12,10 @@ import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestController
+import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import org.springframework.web.bind.annotation.DeleteMapping
+import ru.severnoyesiyanieback.menu.dto.TasteTagResponse
 import ru.severnoyesiyanieback.menu.dto.CreateMenuItemRequest
 import ru.severnoyesiyanieback.menu.dto.MenuItemResponse
 import ru.severnoyesiyanieback.menu.service.MenuItemService
@@ -38,4 +41,17 @@ class MenuItemController(private val menuItemService: MenuItemService) {
         @PathVariable idPosition: Int,
         @Valid @RequestBody request: CreateMenuItemRequest
     ): Mono<MenuItemResponse> = menuItemService.updateMenuItem(idPosition, request)
+
+    @GetMapping("/tags")
+    fun getTags(@RequestParam(required = false) ids: Set<Int>?): Flux<TasteTagResponse> =
+        menuItemService.getTagsByIds(ids.orEmpty())
+
+    @GetMapping("/recommendations")
+    fun getRecommendations(@RequestParam(required = false) tastes: Set<String>?): Flux<MenuItemResponse> =
+        menuItemService.getRecommendedMenuItems(tastes.orEmpty())
+
+    @DeleteMapping("/{idPosition}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    fun deleteMenuItem(@PathVariable idPosition: Int): Mono<Void> =
+        menuItemService.deleteMenuItem(idPosition)
 }

@@ -2,6 +2,8 @@ package ru.severnoyesiyanieback.user.exception
 
 import jakarta.validation.ConstraintViolationException
 import org.springframework.http.HttpStatus
+import org.springframework.http.server.reactive.ServerHttpResponse
+import org.springframework.web.server.ResponseStatusException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.ResponseStatus
 import org.springframework.web.bind.annotation.RestControllerAdvice
@@ -12,6 +14,12 @@ import ru.severnoyesiyanieback.user.dto.ErrorResponse
 
 @RestControllerAdvice
 class GlobalExceptionHandler {
+    @ExceptionHandler(ResponseStatusException::class)
+    fun handleStatus(exception: ResponseStatusException, response: ServerHttpResponse): Mono<ErrorResponse> {
+        response.statusCode = exception.statusCode
+        return Mono.just(ErrorResponse(exception.reason ?: "Invalid request"))
+    }
+
     @ExceptionHandler(UserNotFoundException::class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     fun handleNotFound(exception: UserNotFoundException): Mono<ErrorResponse> =

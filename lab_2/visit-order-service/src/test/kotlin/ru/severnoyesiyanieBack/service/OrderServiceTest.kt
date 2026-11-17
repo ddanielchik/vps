@@ -105,8 +105,7 @@ class OrderServiceTest {
             orderRepository,
             visitRepository,
             userClient,
-            menuClient,
-            mock(ReferenceLock::class.java)
+            menuClient
         )
     }
 
@@ -186,7 +185,33 @@ class OrderServiceTest {
     }
 
     @Test
-    fun `existing order keeps original prices after menu price changes`() {
+    fun `legacy order saves recovered name for subsequent reads`() {
+        val order = Order(visit = visit, waiterId = 2, workerId = 3, totalAmount = BigDecimal("125.50"))
+        order.idOrder = 20
+        order.items.add(OrderItem(order = order, menuItemId = 10, unitPrice = BigDecimal("125.50"), quantity = 1))
+        doReturn(Optional.of(order)).`when`(orderRepository).findById(20)
+        doReturn(cocktail).`when`(menuClient).getMenuItem(10)
+        assertEquals("Aurora", service.getOrderById(20).items.single().name)
+        assertEquals("Aurora", order.items.single().menuItemName)
+        clearInvocations(menuClient)
+        assertEquals("Aurora", service.getOrderById(20).items.single().name)
+        verifyNoInteractions(menuClient)
+    }
+
+    @Test
+    fun `blocked employee cannot create an order`() {
+        stubValidParticipants()
+        doReturn(waiter.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED))
+            .`when`(userClient).getUser(waiter.idUser)
+        val error = assertThrows(org.springframework.web.server.ResponseStatusException::class.java) {
+            service.createOrder(request)
+        }
+        assertEquals(org.springframework.http.HttpStatus.CONFLICT, error.statusCode)
+        verifyNoInteractions(menuClient, orderRepository)
+    }
+
+    @Test
+    fun `existing order keeps name and prices without contacting deleted or unavailable menu`() {
 
         val createdAt = LocalDateTime.of(2025, 4, 7, 20, 30)
 
@@ -204,7 +229,8 @@ class OrderServiceTest {
                 order = order,
                 menuItemId = cocktail.idPosition,
                 unitPrice = BigDecimal("125.50"),
-                quantity = 2
+                quantity = 2,
+                menuItemName = "Aurora"
             )
         )
 
@@ -227,8 +253,8 @@ class OrderServiceTest {
         )
         assertEquals(createdAt, response.createdAt)
 
-        assertEquals("New name", response.items.single().name)
-        verify(menuClient).getMenuItem(10)
+        assertEquals("Aurora", response.items.single().name)
+        verifyNoInteractions(menuClient)
         verifyNoInteractions(visitRepository, userClient)
     }
 

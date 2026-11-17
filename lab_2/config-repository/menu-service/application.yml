@@ -9,3 +9,10 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 1000
+            readTimeout: 2000

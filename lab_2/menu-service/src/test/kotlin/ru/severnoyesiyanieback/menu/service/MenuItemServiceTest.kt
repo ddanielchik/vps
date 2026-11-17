@@ -2,6 +2,7 @@ package ru.severnoyesiyanieback.menu.service
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import ru.severnoyesiyanieback.menu.client.VisitOrderClient
 import org.mockito.Answers
 import org.mockito.Mockito.*
 import org.springframework.data.domain.PageRequest
@@ -38,7 +39,8 @@ class MenuItemServiceTest {
         if (invocation.method.name == "getTransaction") SimpleTransactionStatus()
         else Answers.RETURNS_DEFAULTS.answer(invocation)
     }
-    private val service = MenuItemService(menuRepository, tagsRepository, transactionManager)
+    private val visits = mock(VisitOrderClient::class.java)
+    private val service = MenuItemService(menuRepository, tagsRepository, visits, transactionManager)
 
     @Test
     fun `database access is deferred to bounded elastic and fields are mapped inside transaction`() {
@@ -156,6 +158,16 @@ class MenuItemServiceTest {
         verifyNoInteractions(menuRepository)
         result.block()
         verify(menuRepository).delete(item)
+    }
+
+    @Test
+    fun `referenced menu item cannot be deleted`() {
+        val item = menuItem()
+        doReturn(Optional.of(item)).`when`(menuRepository).findById(7)
+        doReturn(true).`when`(visits).hasMenuItemsWithoutName(7)
+        val error = assertThrows(ResponseStatusException::class.java) { service.deleteMenuItem(7).block() }
+        assertEquals(HttpStatus.CONFLICT, error.statusCode)
+        verify(menuRepository, never()).delete(item)
     }
 
     @Test

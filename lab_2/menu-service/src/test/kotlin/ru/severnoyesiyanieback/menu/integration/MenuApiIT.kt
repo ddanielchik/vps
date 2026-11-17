@@ -34,6 +34,9 @@ import java.time.Duration
 )
 @Import(MenuApiIT.Database::class)
 class MenuApiIT {
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private lateinit var visits: ru.severnoyesiyanieback.menu.client.VisitOrderClient
+
     @TestConfiguration(proxyBeanMethods = false)
     class Database {
         @Bean
@@ -72,7 +75,7 @@ class MenuApiIT {
     }
 
     @Test
-    fun `create read update and internal delete retain the REST contract`() {
+    fun `create read update and delete retain the REST contract`() {
         val created = create("Integration cocktail")
         assertEquals(listOf("SOUR", "SWEET"), created.tasteTags)
         client.get().uri("/api/menu/${created.idPosition}").exchange().expectStatus().isOk
@@ -85,7 +88,7 @@ class MenuApiIT {
             .jsonPath("$.tasteTags[0]").isEqualTo("BITTER")
             .jsonPath("$.tasteTags.length()").isEqualTo(1)
         assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM menu_taste_tags WHERE id_position = ?", Int::class.java, created.idPosition))
-        client.delete().uri("/internal/menu/${created.idPosition}").exchange().expectStatus().isNoContent
+        client.delete().uri("/api/menu/${created.idPosition}").exchange().expectStatus().isNoContent
             .expectBody().isEmpty
         client.get().uri("/api/menu/${created.idPosition}").exchange().expectStatus().isNotFound
             .expectBody().jsonPath("$.message").isEqualTo("Cocktail with id ${created.idPosition} not found")
@@ -184,15 +187,15 @@ class MenuApiIT {
     }
 
     @Test
-    fun `internal lookups validate tag identities and return distinct sorted recommendations`() {
-        val tags = requireNotNull(client.get().uri("/internal/menu/tags?ids=2&ids=1").exchange().expectStatus().isOk
+    fun `lookups validate tag identities and return distinct sorted recommendations`() {
+        val tags = requireNotNull(client.get().uri("/api/menu/tags?ids=2&ids=1").exchange().expectStatus().isOk
             .expectBodyList(TasteTagResponse::class.java).returnResult().responseBody)
         assertEquals(listOf(TasteTagResponse(1, "SWEET"), TasteTagResponse(2, "SOUR")), tags)
-        client.get().uri("/internal/menu/tags").exchange().expectStatus().isOk.expectBody().json("[]")
-        client.get().uri("/internal/menu/tags?ids=1&ids=99999").exchange().expectStatus().isBadRequest
+        client.get().uri("/api/menu/tags").exchange().expectStatus().isOk.expectBody().json("[]")
+        client.get().uri("/api/menu/tags?ids=1&ids=99999").exchange().expectStatus().isBadRequest
             .expectBody(String::class.java).isEqualTo("Some specified taste tags were not found")
-        client.get().uri("/internal/menu/recommendations").exchange().expectStatus().isOk.expectBody().json("[]")
-        val recommendations = requireNotNull(client.get().uri("/internal/menu/recommendations?tastes=SWEET&tastes=SOUR")
+        client.get().uri("/api/menu/recommendations").exchange().expectStatus().isOk.expectBody().json("[]")
+        val recommendations = requireNotNull(client.get().uri("/api/menu/recommendations?tastes=SWEET&tastes=SOUR")
             .exchange().expectStatus().isOk.expectBodyList(MenuItemResponse::class.java).returnResult().responseBody)
         val ids = recommendations.map { it.idPosition }
         assertTrue(ids.isNotEmpty())
@@ -211,25 +214,25 @@ class MenuApiIT {
             )
             INSERT INTO menu_taste_tags (id_position, id_tag) SELECT id_position, 5 FROM inserted
         """.trimIndent())
-        client.get().uri("/internal/menu/recommendations?tastes=SPICY").exchange().expectStatus().isOk
+        client.get().uri("/api/menu/recommendations?tastes=SPICY").exchange().expectStatus().isOk
             .expectBody().jsonPath("$.length()").isEqualTo(50)
     }
 
     @Test
-    fun `missing resources return 404 for update and internal delete`() {
+    fun `missing resources return 404 for update and delete`() {
         val update = CreateMenuItemRequest("Missing", BigDecimal.ONE, "Lime", setOf(1))
         client.put().uri("/api/menu/99999").bodyValue(update).exchange().expectStatus().isNotFound
             .expectBody().jsonPath("$.message").isEqualTo("Cocktail with id 99999 not found")
-        client.delete().uri("/internal/menu/99999").exchange().expectStatus().isNotFound
+        client.delete().uri("/api/menu/99999").exchange().expectStatus().isNotFound
     }
 
     @Test
-    fun `OpenAPI exposes public menu API with relative server and hides internal operations`() {
+    fun `OpenAPI exposes public menu API with relative server and exposes menu operations`() {
         client.get().uri("/v3/api-docs").exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.servers[0].url").isEqualTo("/")
             .jsonPath("$.paths['/api/menu']").exists()
-            .jsonPath("$.paths['/internal/menu/tags']").doesNotExist()
-            .jsonPath("$.paths['/internal/menu/{idPosition}']").doesNotExist()
+            .jsonPath("$.paths['/api/menu/tags']").exists()
+            .jsonPath("$.paths['/api/menu/{idPosition}'].delete").exists()
     }
 
     private fun create(name: String): MenuItemResponse = requireNotNull(

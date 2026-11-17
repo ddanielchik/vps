@@ -27,5 +27,8 @@ class OrderItem(
 
     @field:Positive
     @Column(name = "quantity", nullable = false)
-    var quantity: Int
+    var quantity: Int,
+
+    @Column(name = "menu_item_name", length = 50)
+    var menuItemName: String? = null
 )
