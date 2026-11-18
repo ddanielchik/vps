@@ -27,13 +27,14 @@ class SevernoyesiyanieBackendApplicationIT : ApiIntegrationSupport() {
     }
 
     @Test
-    fun `OpenAPI exposes v1 visit order and reference check routes`() {
-        mockMvc.perform(get("/v3/api-docs"))
+    fun `OpenAPI shows secured public routes and keeps reference checks internal`() {
+        performAsWaiter(get("/v3/api-docs"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.paths['/api/v1/visits']").exists())
             .andExpect(jsonPath("$.paths['/api/v1/orders']").exists())
-            .andExpect(jsonPath("$.paths['/api/v1/orders/references/users/{id}'].get").exists())
-            .andExpect(jsonPath("$.paths['/api/v1/orders/references/menu/{id}'].get").exists())
+            .andExpect(jsonPath("$.paths['/internal/v1/orders/references/users/{userId}']").doesNotExist())
+            .andExpect(jsonPath("$.paths['/api/v1/orders/{orderId}/start'].post").exists())
+            .andExpect(jsonPath("$.components.securitySchemes.bearerAuth.scheme").value("bearer"))
             .andExpect(jsonPath("$.servers[0].url").value("/"))
     }
 }

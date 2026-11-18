@@ -3,6 +3,7 @@ package ru.severnoyesiyanieback.user.dto
 import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import jakarta.validation.constraints.Size
+import ru.severnoyesiyanieback.user.entity.UserRole
 
 data class CreateUserRequest(
     @field:NotBlank @field:Size(max = 50)
@@ -10,5 +11,6 @@ data class CreateUserRequest(
     @field:NotBlank @field:Email @field:Size(max = 100)
     val email: String,
     @field:NotBlank @field:Size(min = 15, max = 128)
-    val password: String
+    val password: String,
+    val role: UserRole = UserRole.CLIENT
 )

@@ -12,9 +12,9 @@ class ReferenceDeletionIT : ApiIntegrationSupport() {
     fun `unused records have no references`() {
         val user = createClient()
         val item = createMenuItem()
-        mockMvc.perform(get("/api/v1/orders/references/users/$user"))
+        performAsWaiter(get("/internal/v1/orders/references/users/$user"))
             .andExpect(status().isOk).andExpect(content().string("false"))
-        mockMvc.perform(get("/api/v1/orders/references/menu/$item"))
+        performAsWaiter(get("/internal/v1/orders/references/menu/$item"))
             .andExpect(status().isOk).andExpect(content().string("false"))
     }
 
@@ -22,17 +22,15 @@ class ReferenceDeletionIT : ApiIntegrationSupport() {
     fun `checks protect users but allow deleting menu with complete snapshots`() {
         val client = createClient()
         val visit = createVisit(client)
-        val waiter = createStaff("WAITER")
-        val worker = createStaff("WORKER")
         val item = createMenuItem()
-        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(
-            """{"visitId":$visit,"waiterId":$waiter,"workerId":$worker,"items":[{"menuItemId":$item,"quantity":1}]}"""
+        performAsWaiter(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(
+            """{"visitId":$visit,"items":[{"menuItemId":$item,"quantity":1}]}"""
         )).andExpect(status().isCreated)
-        listOf(client, waiter, worker).forEach { id ->
-            mockMvc.perform(get("/api/v1/orders/references/users/$id"))
+        listOf(client, waiterId).forEach { id ->
+            performAsWaiter(get("/internal/v1/orders/references/users/$id"))
                 .andExpect(status().isOk).andExpect(content().string("true"))
         }
-        mockMvc.perform(get("/api/v1/orders/references/menu/$item"))
+        performAsWaiter(get("/internal/v1/orders/references/menu/$item"))
             .andExpect(status().isOk).andExpect(content().string("false"))
     }
 }

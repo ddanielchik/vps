@@ -17,5 +17,9 @@ import ru.severnoyesiyanieback.user.service.AuthService
 class AuthController(private val authService: AuthService) {
     @PostMapping("/login")
     fun login(@Valid @RequestBody request: LoginRequest): Mono<ResponseEntity<LoginResponse>> =
-        authService.login(request).map { ResponseEntity.ok().cacheControl(CacheControl.noStore()).body(it) }
+        authService.login(request).map { loginResponse ->
+            ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(loginResponse)
+        }
 }

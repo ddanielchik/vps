@@ -12,12 +12,12 @@ class FeignCircuitBreakerIT : ApiIntegrationSupport() {
     @Test
     fun `remote business errors retain their HTTP status and do not open circuit breaker`() {
         repeat(4) {
-            mockMvc.perform(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
+            performAsWaiter(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"clientId":999,"tableNumber":1}"""))
                 .andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.message").value("User 999 not found"))
         }
-        assertEquals(4, remote.userRequests.get())
+        assertEquals(8, remote.userRequests.get())
         assertTrue(breakers.allCircuitBreakers.all { it.state == CircuitBreaker.State.CLOSED })
         assertTrue(breakers.allCircuitBreakers.all { it.metrics.numberOfFailedCalls == 0 })
         assertEquals(0, count("visits"))
@@ -28,7 +28,7 @@ class FeignCircuitBreakerIT : ApiIntegrationSupport() {
         val user = createClient()
         remote.userFailureStatus.set(503)
         repeat(3) {
-            mockMvc.perform(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
+            performAsWaiter(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"clientId":$user,"tableNumber":1}"""))
                 .andExpect(status().isServiceUnavailable)
                 .andExpect(jsonPath("$.message").isNotEmpty)
@@ -40,7 +40,7 @@ class FeignCircuitBreakerIT : ApiIntegrationSupport() {
         breakers.allCircuitBreakers.filter { it.state == CircuitBreaker.State.OPEN }
             .forEach { it.transitionToHalfOpenState() }
         createVisit(user)
-        assertEquals(3, remote.userRequests.get())
+        assertEquals(4, remote.userRequests.get())
         assertEquals(1, count("visits"))
         assertTrue(breakers.allCircuitBreakers.all { it.state == CircuitBreaker.State.CLOSED })
     }

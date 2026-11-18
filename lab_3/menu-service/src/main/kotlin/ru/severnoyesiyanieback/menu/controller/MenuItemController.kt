@@ -1,5 +1,6 @@
 package ru.severnoyesiyanieback.menu.controller
 
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import org.springframework.data.domain.Slice
 import org.springframework.http.HttpStatus
@@ -32,11 +33,13 @@ class MenuItemController(private val menuItemService: MenuItemService) {
         menuItemService.getAllMenuItems(page)
 
     @PostMapping
+    @SecurityRequirement(name = "bearerAuth")
     @ResponseStatus(HttpStatus.CREATED)
     fun createMenuItem(@Valid @RequestBody request: CreateMenuItemRequest): Mono<MenuItemResponse> =
         menuItemService.createMenuItem(request)
 
     @PutMapping("/{idPosition}")
+    @SecurityRequirement(name = "bearerAuth")
     fun updateMenuItem(
         @PathVariable idPosition: Int,
         @Valid @RequestBody request: CreateMenuItemRequest
@@ -51,6 +54,7 @@ class MenuItemController(private val menuItemService: MenuItemService) {
         menuItemService.getRecommendedMenuItems(tastes.orEmpty())
 
     @DeleteMapping("/{idPosition}")
+    @SecurityRequirement(name = "bearerAuth")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     fun deleteMenuItem(@PathVariable idPosition: Int): Mono<Void> =
         menuItemService.deleteMenuItem(idPosition)

@@ -16,7 +16,7 @@ import ru.severnoyesiyanieback.user.dto.LoginResponse
 import ru.severnoyesiyanieback.user.entity.User
 import ru.severnoyesiyanieback.user.entity.UserStatus
 import ru.severnoyesiyanieback.user.repository.UserRepository
-import ru.severnoyesiyanieback.user.security.JWT_ISSUER
+import ru.severnoyesiyanieback.security.JWT_ISSUER
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID

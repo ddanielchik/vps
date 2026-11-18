@@ -17,6 +17,7 @@ import ru.severnoyesiyanieBack.dto.UpdateVisitRequest
 import ru.severnoyesiyanieBack.dto.VisitPreferencesRequest
 import ru.severnoyesiyanieBack.dto.VisitResponse
 import ru.severnoyesiyanieBack.entity.TastePreference
+import ru.severnoyesiyanieBack.entity.UserRole
 import ru.severnoyesiyanieBack.entity.UserStatus
 import ru.severnoyesiyanieBack.entity.Visit
 import ru.severnoyesiyanieBack.entity.VisitStatus
@@ -32,12 +33,15 @@ class VisitService(
     private val menuClient: MenuClient
 ) {
     @Transactional(readOnly = true)
-    fun getVisitById(id: Int): VisitResponse = toResponse(findVisit(id))
+    fun getVisitById(id: Int, clientId: Int? = null): VisitResponse = toResponse(findVisit(id, clientId))
 
     @Transactional
     fun openVisit(request: CreateVisitRequest): VisitResponse {
 
         val client = userClient.getUser(request.clientId).awaitResponse()
+        if (client.role != UserRole.CLIENT) {
+            throw ResponseStatusException(HttpStatus.CONFLICT, "A visit must belong to a client")
+        }
         if (client.status == UserStatus.BLOCKED) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "Blocked users cannot open visits")
         }
@@ -68,7 +72,8 @@ class VisitService(
     @Transactional(readOnly = true)
     fun getAllVisits(
         page: Int,
-        size: Int
+        size: Int,
+        clientId: Int? = null
     ): Page<VisitResponse> {
 
         if (page < 0) {
@@ -84,8 +89,9 @@ class VisitService(
             Sort.by("idVisit")
         )
 
-        return visitRepository.findAll(pageable)
-            .map { visit -> toResponse(visit) }
+        val visits = if (clientId == null) visitRepository.findAll(pageable)
+            else visitRepository.findByClientId(clientId, pageable)
+        return visits.map(::toResponse)
     }
 
     @Transactional
@@ -103,10 +109,11 @@ class VisitService(
     @Transactional
     fun updateTastePreferences(
         id: Int,
-        request: VisitPreferencesRequest
+        request: VisitPreferencesRequest,
+        clientId: Int? = null
     ): VisitResponse {
 
-        val visit = findOpenVisit(id)
+        val visit = findOpenVisit(id, clientId)
 
         val tags = if (request.tasteTagIds.isEmpty()) {
             emptyList()
@@ -125,18 +132,23 @@ class VisitService(
     }
 
     @Transactional(readOnly = true)
-    fun getRecommendations(visitId: Int): List<MenuItemResponse> {
-        val visit = findOpenVisit(visitId)
+    fun getRecommendations(visitId: Int, clientId: Int? = null): List<MenuItemResponse> {
+        val visit = findOpenVisit(visitId, clientId)
         val preferredTastes = visit.tastePreferences.map { it.name }.toSet()
         if (preferredTastes.isEmpty()) return emptyList()
         return menuClient.getRecommendations(preferredTastes).awaitResponse()
     }
 
-    private fun findVisit(id: Int): Visit = visitRepository.findById(id)
-        .orElseThrow { VisitNotFoundException(id) }
+    private fun findVisit(id: Int, clientId: Int?): Visit {
+        val visit = visitRepository.findById(id).orElseThrow { VisitNotFoundException(id) }
+        if (clientId != null && clientId != visit.clientId) {
+            throw ResponseStatusException(HttpStatus.FORBIDDEN, "This visit belongs to another client")
+        }
+        return visit
+    }
 
-    private fun findOpenVisit(id: Int): Visit {
-        val visit = findVisit(id)
+    private fun findOpenVisit(id: Int, clientId: Int? = null): Visit {
+        val visit = findVisit(id, clientId)
         if (visit.status != VisitStatus.OPEN) throw VisitAlreadyClosedException(id)
         return visit
     }

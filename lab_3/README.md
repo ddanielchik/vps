@@ -1,46 +1,12 @@
 # Лабораторная работа №3
 
-## Вход и создание пользователей
-
-`POST /api/v1/auth/login` выдаёт JWT после проверки email и пароля. `POST /api/v1/users` принимает `Authorization: Bearer <token>` и проверяет, что текущий пользователь имеет роль `LORD` и статус `ACTIVE`. Новый пользователь получает роль `CLIENT`.
-
-| Где | Что реализовано |
-| --- | --- |
-| [`AuthController`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/controller/AuthController.kt) и [`AuthService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/AuthService.kt) | Вход, проверка статуса и пароля, выпуск JWT на 30 минут. |
-| [`SecurityConfig`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/security/SecurityConfig.kt) | Spring Security проверяет подпись и срок JWT. Для создания пользователя роль и статус проверяются по текущей записи в БД. |
-| [`UserService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/UserService.kt) и [миграция Flyway](user-service/src/main/resources/db/migration/V3__add_password_hash.sql) | Хранение хэша PBKDF2. Ответы API содержат поля профиля. |
-| [`LordBootstrap`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/security/LordBootstrap.kt) | Создание первого `LORD` при старте из параметров запуска. |
-
-### Настройка Compose
-
-Сгенерируйте ключ командой `openssl rand -hex 32`. Создайте локальный файл `lab_3/.env` и подставьте ключ и свой пароль. Пароль должен содержать от 15 до 128 символов.
-
-```dotenv
-LAB3_JWT_SECRET='вставьте результат openssl'
-LAB3_LORD_EMAIL=lord@example.com
-LAB3_LORD_PASSWORD='вставьте свою парольную фразу'
-```
-
-Войдите с указанным email и паролем. При повторном запуске с тем же email сохраняется существующий аккаунт и его текущий пароль. При подключении к существующей БД второй лабы старые аккаунты без хэша получают `401` при входе.
-
-### Проверка авторизации в Swagger
-
-1. Откройте **Пользователи → POST /api/v1/auth/login**. В теле передайте `email` и `password` из `.env`. При верных данных ответ `200` содержит `accessToken`. При неверном пароле ожидается `401`.
-2. Вызовите **POST /api/v1/users** без авторизации. Ожидается `401`.
-3. Нажмите **Authorize** в Swagger, вставьте только значение `accessToken` и повторите запрос с именем, email и паролем из [примера ниже](#1-создать-пользователя). Ожидается `201`, роль `CLIENT` и данные профиля.
-4. Войдите с данными созданного клиента. В **Authorize** замените токен супервайзера на токен клиента и повторите создание пользователя. Ожидается `403`.
-
-## Основа из лабораторной №2
-
-Декомпозировать на микросервисы разработанную систему из лабораторной работы 1.
-
- - Микросервисы должны регистрироваться в [Eureka](https://spring.io/projects/spring-cloud-netflix).
- - Микросервисы должны подтягивать конфигурацию из [Config-Server](https://spring.io/projects/spring-cloud-config).
- - Микросервисы должны быть доступны через [Spring Gateway](https://spring.io/projects/spring-cloud-gateway).
- - Для взаимодействия между микросервисами использовать Feign Client.
- - Внедрить [Circuit Breaker](https://cloud.spring.io/spring-cloud-netflix/multi/multi__circuit_breaker_hystrix_clients.html).
- - Минимум один микросервис должен быть написан с использованием Reactor и R2DBC.
- - Минимум один микросервис должен быть написан с использованием Reactor и Spring Data JPA/JDBC.
+- Добавить авторизацию.
+- Для авторизации использовать spring-security в комбинации с JWT токеном в хедере Authorization.
+- Реализовать ролевую модель.
+- Должны быть методы, логика которых меняется в зависимости от текущего пользователя. Пример: Повар не может загружать товары на склад, а логист не может принимать заказы у пользователей.
+- Не отдавать пароль в запросе, где участвуют модели пользователя.
+- Все пароли должны храниться в хэшированном виде.
+- Пользователей могут создавать только супервайзеры.
 
 ## Общие условия задания
 
@@ -54,35 +20,40 @@ LAB3_LORD_PASSWORD='вставьте свою парольную фразу'
 
 Всё должно запускаться через docker compose.
 
-## Реализация требований
+## Где реализовано
 
-Серверная часть коктейльного бара на **Kotlin и Java 21**. Монолит из [лабораторной №1](../lab_1) разделён на три бизнес-сервиса для пользователей, меню и оформления посещений и заказов. Через API можно открыть посещение, подобрать коктейли по вкусу и оформить заказ.
-
-[Запуск](#быстрый-запуск) · [Архитектура](#архитектура) · [Сценарий в Swagger](#проверка-в-swagger) · [Автоматические тесты](#автоматические-тесты)
-
-| Требование | Где реализовано | Как проверить |
-| --- | --- | --- |
-| Регистрация в Eureka | [`discovery-service`](discovery-service) ведёт реестр. Gateway и три бизнес-сервиса используют [общую конфигурацию Eureka](config-repository/shared/application.yml). Config Server стартует самостоятельно. | Откройте Eureka после [запуска](#быстрый-запуск) и найдите четыре приложения со статусом `UP`. |
-| Конфигурация из Config Server | [`config-service`](config-service) читает [`config-repository`](config-repository). Gateway, Eureka и бизнес-сервисы загружают настройки через `spring.config.import`. | Проверьте ответ Config Server командой из раздела [«Где смотреть настройки»](#где-смотреть-настройки). |
-| Доступ через Spring Gateway | [Маршруты Gateway](config-repository/api-gateway/application.yml) направляют запросы `/api/v1/...` к сервисам по именам из Eureka. Там же настроен общий Swagger UI. | В Swagger выберите спецификацию и выполните запрос. В **Request URL** будет адрес Gateway на порту `8080` и префикс `/api/v1`. |
-| Вызовы через Feign Client | Сервис посещений использует [`UserClient` и `MenuClient`](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/client). Сервис меню использует [`VisitOrderClient`](menu-service/src/main/kotlin/ru/severnoyesiyanieback/menu/client/VisitOrderClient.kt). Все три клиента используют Reactive Feign. | Откройте посещение и получите рекомендации по [шагам 2–3](#2-открыть-посещение). Эти запросы обращаются к пользователям и меню. |
-| Circuit Breaker | [Настройки Resilience4j](config-repository/visit-order-service/application.yml) применяются к вызовам из сервиса посещений. | В [шаге 5](#5-остановить-меню-и-проверить-восстановление) проверьте ответы `200 → 503 → 200`. Тест `FeignCircuitBreakerIT` проверяет срабатывание Circuit Breaker. |
-| Reactor и R2DBC | [`user-service`](user-service) использует WebFlux и [реактивный репозиторий](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/repository/UserRepository.kt). | Выполните создание и чтение пользователя в [шаге 1](#1-создать-пользователя). Работу репозитория с PostgreSQL проверяет `UserApiIT`. |
-| Reactor и Spring Data JPA/JDBC | [`menu-service`](menu-service) сочетает WebFlux с [JPA-репозиторием](menu-service/src/main/kotlin/ru/severnoyesiyanieback/menu/repository/MenuItemRepository.kt). Блокирующие запросы к БД выполняются на `boundedElastic`. | Запросите теги и рекомендации в Swagger по [шагу 3](#3-сохранить-вкусы-и-получить-рекомендации). Поведение меню с PostgreSQL проверяет `MenuApiIT`. |
-
-### Общие условия разработки
-
-| Условие | Где посмотреть |
+| Что | Где |
 | --- | --- |
-| Стабильные версии и конвенции Kotlin и Java | Версии Java, Kotlin, Spring Boot и Spring Cloud заданы в [родительском `pom.xml`](pom.xml). Сборка и запуск контейнеров используют Java 21, версии образов заданы в [Dockerfile](Dockerfile). Код сервисов написан на Kotlin. |
-| SOLID, DRY, KISS | Контроллеры принимают HTTP-запросы, сервисы выполняют бизнес-операции, репозитории работают с БД. Общие настройки вынесены в [`shared/application.yml`](config-repository/shared/application.yml). |
-| Feature branching и Conventional Commits | Изменения второй лабы ведутся в ветке `feature/lab2-reactive-feign`. Пример сообщения из истории — `docs(lab2): describe architecture setup and verification`. |
-| Модульные и интеграционные тесты, покрытие от 70% | Тесты на JUnit Jupiter и Testcontainers лежат в `src/test` бизнес-модулей. `./mvnw clean verify` запускает проверки, в том числе порог JaCoCo. См. [«Автоматические тесты»](#автоматические-тесты). |
-| Запуск через Docker Compose | [`docker-compose.yml`](docker-compose.yml) поднимает весь стенд. Команды запуска и адреса сервисов приведены ниже. |
+| `POST /api/v1/auth/login` проверяет email и пароль. Успешный вход выдаёт JWT на 30 минут. | [`AuthController`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/controller/AuthController.kt), [`AuthService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/AuthService.kt). |
+| Пароли хранятся как хэши PBKDF2. API возвращает только данные профиля и токен при входе. | [`UserService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/UserService.kt), [`UserResponse`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/dto/UserResponse.kt), [миграция Flyway](user-service/src/main/resources/db/migration/V3__add_password_hash.sql). |
+| Только активный `LORD` создаёт пользователей, меняет их данные и статус и управляет меню. Каждый вошедший пользователь может читать свой профиль. | `SecurityConfig` в [`user-service`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/security/SecurityConfig.kt) и [`menu-service`](menu-service/src/main/kotlin/ru/severnoyesiyanieback/menu/security/SecurityConfig.kt). |
+| Заказ привязан к визиту клиента. `CLIENT` оформляет заказ в свой визит, `WAITER` — в выбранный открытый визит, `WORKER` берёт заказ в работу. | [`OrderController`](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/controller/OrderController.kt), [`OrderService`](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/service/OrderService.kt). |
+| Клиент видит свои визиты, сотрудники видят все. Официант может поменять номер стола и закрыть визит. | [`VisitController`](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/controller/VisitController.kt), [`VisitService`](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/service/VisitService.kt). |
+| Подпись и срок действия JWT проверяет Spring Security. Бизнес-сервисы читают текущую роль и статус аккаунта при защищённых запросах. | [`JwtKeys`](security-support/src/main/kotlin/ru/severnoyesiyanieback/security/JwtKeys.kt), [`SecurityConfig` сервиса визитов и заказов](visit-order-service/src/main/kotlin/ru/severnoyesiyanieBack/security/SecurityConfig.kt). |
 
-## Быстрый запуск
+Архитектура наследуется из [лабораторной №2](../lab_2/README.md). Публичный API имеет префикс `/api/v1` и доступен через Gateway. Внутренние Feign-запросы используют `/internal/v1` в сети Compose. Эти маршруты не опубликованы через Gateway.
 
-Запустите Docker Desktop и заполните `lab_3/.env` по инструкции выше. Стенд использует порты `8080` и `8761`. Из корня репозитория выполните:
+## Роли и доступ
+
+| Роль | Доступ |
+| --- | --- |
+| Гость | Посмотреть меню и войти. |
+| `CLIENT` | Посмотреть свой профиль, открыть свой визит, задать предпочтения и заказать в свой открытый визит. Читать свои визиты и заказы. |
+| `WAITER` | Смотреть визиты и заказы, оформлять заказы для открытых визитов клиентов, менять номер столика и закрывать визит. |
+| `WORKER` | Смотреть визиты и заказы, взять заказ в работу через `POST /api/v1/orders/{orderId}/start`. |
+| `LORD` | Создавать, просматривать и блокировать пользователей, управлять меню, просматривать визиты и заказы. |
+
+При создании заказа JWT определяет, кто отправил запрос. `visitId` указывает, к какому визиту привязать заказ. Если заказ оформляет официант, сервер сохраняет его ID в `waiterId`. Когда бармен берёт заказ, сервер записывает его ID в `workerId`. Второй бармен получает `409`, если заказ уже взят.
+
+## Запуск
+
+Понадобится Docker Desktop. В каталоге `lab_3` создай локальный `.env`. Сгенерируй ключ командой `openssl rand -hex 32` и подставь результат. Для пароля супервайзера используй от 15 до 128 символов.
+
+```dotenv
+LAB3_JWT_SECRET='вставь результат openssl'
+LAB3_LORD_EMAIL=lord@example.com
+LAB3_LORD_PASSWORD='вставь свою парольную фразу'
+```
 
 ```bash
 cd lab_3
@@ -90,178 +61,64 @@ docker compose -p lab3 up -d --build
 docker compose -p lab3 ps
 ```
 
-| Куда зайти | Что проверить |
-| --- | --- |
-| [Swagger UI](http://localhost:8080/swagger-ui/index.html) | В **Select a definition** доступны «Пользователи», «Меню» и «Посещения и заказы». |
-| [Eureka](http://localhost:8761) | `API-GATEWAY`, `USER-SERVICE`, `MENU-SERVICE` и `VISIT-ORDER-SERVICE` зарегистрированы со статусом `UP`. |
+При первом запуске `LordBootstrap` создаёт учётку `LORD` с указанным email. При повторном запуске с тем же email сохраняется текущий пароль. Проверь, что порты `8080` и `8761` свободны, если до этого запускала вторую лабораторную.
 
-После старта дайте сервисам зарегистрироваться и обновить кэш Eureka. Если Swagger возвращает `503`, сначала проверьте регистрацию и логи.
-
-```bash
-docker compose -p lab3 logs --tail=80 api-gateway discovery-service
-```
-
-Чтобы остановить стенд с сохранением данных, выполните `docker compose -p lab3 down`. Для работы с кодом откройте [родительский POM](pom.xml) как Maven-проект в IntelliJ IDEA и выберите JDK 21.
-
-## Архитектура
-
-```mermaid
-flowchart LR
-    Swagger["Swagger / клиент"] --> Gateway["Gateway · 8080"]
-    Gateway --> Users["user-service"]
-    Gateway --> Menu["menu-service"]
-    Gateway --> Visits["visit-order-service"]
-    Visits -->|"Feign + Circuit Breaker"| Users
-    Visits -->|"Feign + Circuit Breaker"| Menu
-    Menu -->|"Feign · проверка ссылок"| Visits
-    Users --> UsersDB[("PostgreSQL · users")]
-    Menu --> MenuDB[("PostgreSQL · menu")]
-    Visits --> VisitsDB[("PostgreSQL · visits")]
-```
-
-| Модуль | Ответственность |
-| --- | --- |
-| [`api-gateway`](api-gateway) | Обслуживает Swagger UI и принимает REST-запросы. Маршруты `/api/v1/...` направляются к сервисам по именам из Eureka. |
-| [`discovery-service`](discovery-service) | Реестр Eureka. Хранит адреса Gateway и трёх бизнес-сервисов. |
-| [`config-service`](config-service) | Выдаёт настройки из [`config-repository`](config-repository). Общие параметры Eureka хранятся в `shared`, настройки каждого приложения — в его каталоге. |
-| [`user-service`](user-service) | Пользователи, роли, блокировка и восстановление. Spring WebFlux, Reactor и реактивный доступ к PostgreSQL через R2DBC. |
-| [`menu-service`](menu-service) | Коктейли, теги и поиск по вкусам. Spring WebFlux и Reactor, JPA-запросы выполняются на `boundedElastic`. |
-| [`visit-order-service`](visit-order-service) | Посещения, предпочтения и заказы. Spring MVC и JPA. Сохраняет название и цену коктейля в позиции заказа. |
-
-У каждого бизнес-сервиса своя БД и миграции Flyway. В посещениях и заказах хранятся ID пользователей и коктейлей из других сервисов. При создании заказа сервис проверяет открытое посещение и роли сотрудников, загружает меню через Feign и сохраняет заказ с позициями в одной локальной транзакции.
-
-**Как формируются рекомендации.** `PUT /api/v1/visits/{id}/preferences` принимает ID вкусовых тегов. Сервис посещений получает их названия через `/api/v1/menu/tags` и сохраняет предпочтения. При `GET /api/v1/visits/{id}/recommendations` он передаёт названия в сервис меню и получает до 50 совпадающих коктейлей.
-
-### Где смотреть настройки
-
-- [Маршруты Gateway и список спецификаций Swagger](config-repository/api-gateway/application.yml).
-- [Общие параметры Eureka и профиль `reactive-feign`](config-repository/shared/application.yml). Профиль подключают меню и сервис посещений.
-- [Параметры Circuit Breaker](config-repository/visit-order-service/application.yml). Resilience4j временно ограничивает обращения к сервису после серии сбоев и пропускает пробные запросы для проверки восстановления.
-
-Config Server работает на внутреннем порту `8888`. Посмотреть, что он отдаёт клиенту, можно из контейнера:
-
-```bash
-docker compose -p lab3 exec config-service curl -fsS http://localhost:8888/discovery-service/default
-```
-
-В ответе `propertySources` содержит настройки `discovery-service`, в том числе порт `8761`.
+Открой [Swagger](http://localhost:8080/swagger-ui/index.html). После запуска дождись регистрации в [Eureka](http://localhost:8761) и обновления списка сервисов у клиентов. Это может занять около минуты. Остановить стенд с сохранением базы можно командой `docker compose -p lab3 down`.
 
 ## Проверка в Swagger
 
-Откройте [Swagger UI](http://localhost:8080/swagger-ui/index.html). Выбирайте нужную спецификацию в **Select a definition**, раскройте ручку и нажимайте **Try it out → Execute**. Код и тело ответа показаны в **Server response**. Подставляйте ID из своих ответов вместо чисел в примерах.
+При входе выбери **Пользователи → POST /api/v1/auth/login**, передай email и пароль и скопируй `accessToken`. Для вызова защищённой ручки вставь токен в **Authorize** в нужной спецификации. При смене роли замени токен.
 
-### 1. Создать пользователя
+1. **Зайди гостем.** В спецификации «Меню» выполни `GET /api/v1/menu`. Ответ `200`. Попробуй `POST /api/v1/users` без токена. Ответ `401`.
+2. **Создай три учётки.** Войди под `LORD` и вызови `POST /api/v1/users` с телом ниже. Затем повтори с другими email и ролями `WAITER` и `WORKER`. Ожидается `201`. Ответ содержит `idUser` и роль.
+3. **Открой визит и сделай заказ.** Войди как `CLIENT`. В «Посещения и заказы» отправь `POST /api/v1/visits` с `clientId` этой учётки и `tableNumber`. Затем в `POST /api/v1/orders` передай `idVisit` из ответа и позиции из меню. Ожидается `201`.
+4. **Дозакажи как официант.** Войди как `WAITER`. `GET /api/v1/visits` покажет визиты. Отправь `POST /api/v1/orders` с тем же `visitId`. Ответ `201` содержит ID вошедшего официанта в `waiterId`. Оба заказа видны в `GET /api/v1/orders`.
+5. **Возьми заказ как бармен.** Войди как `WORKER`. Выбери `idOrder` из `GET /api/v1/orders` и вызови `POST /api/v1/orders/{orderId}/start`. Ответ `200` содержит ID бармена в `workerId`.
+6. **Проверь запреты.** С токеном `CLIENT` создание пользователя возвращает `403`. Попытка другого клиента заказать в чужой визит тоже возвращает `403`. С токеном `WORKER` создание заказа возвращает `403`, а меню доступно гостю.
 
-В «Пользователи» войдите как `LORD` и вставьте токен через **Authorize**. Затем вызовите `POST /api/v1/users`.
+Пример создания клиента:
 
 ```json
 {
   "name": "Анна",
   "email": "anna@example.com",
-  "password": "test customer password phrase"
+  "password": "test customer password phrase",
+  "role": "CLIENT"
 }
 ```
 
-Ожидается `201`, роль `CLIENT` и статус `ACTIVE`. Сохраните `idUser`. При повторном создании используйте новый email. Прочитайте созданную запись через `GET /api/v1/users/{userId}`.
-
-### 2. Открыть посещение
-
-В «Посещения и заказы» вызовите `POST /api/v1/visits`. В `clientId` передайте `idUser` из первого шага.
+Пример открытия визита:
 
 ```json
 {
-  "clientId": 1,
+  "clientId": 2,
   "tableNumber": 5
 }
 ```
 
-Ожидается `201` и статус `OPEN`. Сохраните `idVisit`. Сервис посещений проверяет пользователя через Feign.
-
-### 3. Сохранить вкусы и получить рекомендации
-
-1. В «Меню» откройте `GET /api/v1/menu/tags` и добавьте к параметру `ids` значения `1` и `2`. На начальных данных ответ `200` содержит теги `SWEET` и `SOUR`. Это поиск в справочнике по ID. Предпочтения для конкретного посещения сохраняются в следующем запросе.
-2. В «Посещения и заказы» вызовите `PUT /api/v1/visits/{id}/preferences` с вашим `idVisit` и телом ниже. Ожидается `200` с сохранёнными предпочтениями.
-3. Вызовите `GET /api/v1/visits/{id}/recommendations`. Ожидается `200` и массив коктейлей. Скопируйте `idPosition` одного коктейля для заказа.
-
-```json
-{
-  "tasteTagIds": [1, 2]
-}
-```
-
-### 4. Оформить заказ
-
-Для заказа нужны действующие сотрудники с ролями `WAITER` и `WORKER`. Их можно подготовить один раз в локальной БД. Команда выведет `id_user` каждого сотрудника.
-
-```bash
-docker compose -p lab3 exec -T users-db psql -U users -d users <<'SQL'
-INSERT INTO users (name, email, role)
-VALUES ('Waiter', 'waiter@bar.local', 'WAITER'),
-       ('Worker', 'worker@bar.local', 'WORKER')
-ON CONFLICT (email) DO NOTHING;
-
-SELECT id_user, role, status FROM users
-WHERE email IN ('waiter@bar.local', 'worker@bar.local');
-SQL
-```
-
-В Swagger вызовите `POST /api/v1/orders`. Подставьте `idVisit`, ID сотрудников и `idPosition` коктейля. `quantity` — количество.
+Пример создания заказа:
 
 ```json
 {
   "visitId": 1,
-  "waiterId": 2,
-  "workerId": 3,
-  "items": [{ "menuItemId": 1, "quantity": 2 }]
+  "items": [
+    { "menuItemId": 1, "quantity": 2 }
+  ]
 }
 ```
-
-Ожидается `201`. Проверьте цену, количество и итоговую сумму в ответе, затем запросите `GET /api/v1/orders/{id}` с полученным `idOrder`.
-
-### 5. Остановить меню и проверить восстановление
-
-Оставьте посещение открытым с сохранёнными вкусами. Выполните `GET /api/v1/visits/{id}/recommendations` и убедитесь, что ответ `200`. Затем остановите сервис из терминала:
-
-```bash
-docker compose -p lab3 stop menu-service
-```
-
-Повторите тот же запрос в Swagger несколько раз. Ожидается `503 Service Unavailable`. Запустите меню обратно:
-
-```bash
-docker compose -p lab3 start menu-service
-```
-
-Дождитесь статуса `UP` в Eureka и обновления реестра у клиентов, затем повторите запрос. Ожидается `200` с коктейлями. Swagger показывает HTTP-результат, а переходы Circuit Breaker и количество обращений к сервису проверяет [FeignCircuitBreakerIT](visit-order-service/src/test/kotlin/ru/severnoyesiyanieBack/integration/FeignCircuitBreakerIT.kt).
-
-### 6. Заблокировать и восстановить пользователя
-
-1. В «Пользователи» выполните `DELETE /api/v1/users/{userId}`. Ответ `204`. Чтение того же пользователя возвращает прежний ID со статусом `BLOCKED`.
-2. Повторите `POST /api/v1/visits` с этим `clientId`. Ожидается `409`. Предыдущее посещение доступно через `GET /api/v1/visits/{id}`.
-3. Вызовите `PUT /api/v1/users/{userId}` и передайте текущее имя, email и статус `ACTIVE`. После восстановления новое посещение снова открывается с `201`.
-
-```json
-{
-  "name": "Анна",
-  "email": "anna@example.com",
-  "status": "ACTIVE"
-}
-```
-
-В конце закройте первое посещение из шага 2 через `POST /api/v1/visits/{id}/close`. Ожидается `200`, статус `CLOSED` и заполненное `closedAt`.
 
 ## Автоматические тесты
 
-Из `lab_3` с JDK 21 и работающим Docker:
+Из `lab_3` с JDK 21 и запущенным Docker:
 
 ```bash
 ./mvnw clean verify
 ```
 
-Для запуска из Maven-контейнера:
+Через Docker Compose:
 
 ```bash
 docker compose -p lab3-tests -f compose.test.yml run --rm tests
 ```
 
-Surefire запускает модульные тесты, Failsafe — интеграционные с PostgreSQL в Testcontainers. На этапе `verify` JaCoCo проверяет минимум **70% покрытия строк и инструкций** в каждом бизнес-модуле. HTML-отчёт создаётся в `target/site/jacoco/index.html` внутри `user-service`, `menu-service` и `visit-order-service`.
+Модульные тесты используют JUnit Jupiter, интеграционные поднимают PostgreSQL через Testcontainers. JaCoCo проверяет порог 70% строк и инструкций в каждом бизнес-модуле и в `security-support`.

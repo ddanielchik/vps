@@ -44,8 +44,6 @@ class OrderServiceTest {
 
     private val request = CreateOrderRequest(
         visitId = 4,
-        waiterId = 2,
-        workerId = 3,
         items = listOf(
             CreateOrderItemRequest(10, 2),
             CreateOrderItemRequest(11, 3)
@@ -58,15 +56,15 @@ class OrderServiceTest {
         savedOrder = null
 
         client = UserResponse(
-            1, "Client", "client@example.com", UserRole.CLIENT
+            1, UserRole.CLIENT
         )
 
         waiter = UserResponse(
-            2, "Waiter", "waiter@example.com", UserRole.WAITER
+            2, UserRole.WAITER
         )
 
         worker = UserResponse(
-            3, "Worker", "worker@example.com", UserRole.WORKER
+            3, UserRole.WORKER
         )
 
         visit = Visit(
@@ -101,6 +99,7 @@ class OrderServiceTest {
         visitRepository = mock(VisitRepository::class.java)
         userClient = mock(UserClient::class.java)
         menuClient = mock(MenuClient::class.java)
+        doReturn(Mono.just(waiter)).`when`(userClient).getUser(waiter.idUser)
 
         service = OrderService(
             orderRepository,
@@ -113,7 +112,7 @@ class OrderServiceTest {
     @Test
     fun `creating an order calculates exact totals and connects every item to its order`() {
 
-        stubValidParticipants()
+        stubOpenVisit()
 
         doReturn(Mono.just(cocktail))
             .`when`(menuClient).getMenuItem(10)
@@ -121,13 +120,13 @@ class OrderServiceTest {
         doReturn(Mono.just(lemonade))
             .`when`(menuClient).getMenuItem(11)
 
-        val response = service.createOrder(request)
+        val response = service.createOrder(request, waiter.idUser)
         val persisted = requireNotNull(savedOrder)
 
         assertEquals(20, response.idOrder)
         assertEquals(4, response.visitId)
         assertEquals(2, response.waiterId)
-        assertEquals(3, response.workerId)
+        assertNull(response.workerId)
 
         assertEquals(
             BigDecimal("386.75"),
@@ -167,7 +166,7 @@ class OrderServiceTest {
 
         assertSame(visit, persisted.visit)
         assertEquals(waiter.idUser, persisted.waiterId)
-        assertEquals(worker.idUser, persisted.workerId)
+        assertNull(persisted.workerId)
 
         assertEquals(cocktail.idPosition, persisted.items[0].menuItemId)
         assertEquals(lemonade.idPosition, persisted.items[1].menuItemId)
@@ -192,22 +191,22 @@ class OrderServiceTest {
         order.items.add(OrderItem(order = order, menuItemId = 10, unitPrice = BigDecimal("125.50"), quantity = 1))
         doReturn(Optional.of(order)).`when`(orderRepository).findById(20)
         doReturn(Mono.just(cocktail)).`when`(menuClient).getMenuItem(10)
-        assertEquals("Aurora", service.getOrderById(20).items.single().name)
+        assertEquals("Aurora", service.getOrderById(20, waiter.idUser).items.single().name)
         assertEquals("Aurora", order.items.single().menuItemName)
         clearInvocations(menuClient)
-        assertEquals("Aurora", service.getOrderById(20).items.single().name)
+        assertEquals("Aurora", service.getOrderById(20, waiter.idUser).items.single().name)
         verifyNoInteractions(menuClient)
     }
 
     @Test
     fun `blocked employee cannot create an order`() {
-        stubValidParticipants()
+        stubOpenVisit()
         doReturn(Mono.just(waiter.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED)))
             .`when`(userClient).getUser(waiter.idUser)
         val error = assertThrows(org.springframework.web.server.ResponseStatusException::class.java) {
-            service.createOrder(request)
+            service.createOrder(request, waiter.idUser)
         }
-        assertEquals(org.springframework.http.HttpStatus.CONFLICT, error.statusCode)
+        assertEquals(org.springframework.http.HttpStatus.FORBIDDEN, error.statusCode)
         verifyNoInteractions(menuClient, orderRepository)
     }
 
@@ -241,7 +240,7 @@ class OrderServiceTest {
         `when`(orderRepository.findById(20))
             .thenReturn(Optional.of(order))
 
-        val response = service.getOrderById(20)
+        val response = service.getOrderById(20, waiter.idUser)
 
         assertEquals(BigDecimal("251.00"), response.totalAmount)
         assertEquals(
@@ -256,7 +255,7 @@ class OrderServiceTest {
 
         assertEquals("Aurora", response.items.single().name)
         verifyNoInteractions(menuClient)
-        verifyNoInteractions(visitRepository, userClient)
+        verifyNoInteractions(visitRepository)
     }
 
     @Test
@@ -271,7 +270,7 @@ class OrderServiceTest {
         `when`(orderRepository.findById(20))
             .thenReturn(Optional.of(order))
 
-        val response = service.getOrderById(20)
+        val response = service.getOrderById(20, waiter.idUser)
 
         assertNull(response.waiterId)
         assertNull(response.workerId)
@@ -285,7 +284,7 @@ class OrderServiceTest {
             .thenReturn(Optional.empty())
 
         assertThrows(OrderNotFoundException::class.java) {
-            service.getOrderById(99)
+            service.getOrderById(99, waiter.idUser)
         }
     }
 
@@ -296,11 +295,10 @@ class OrderServiceTest {
             .thenReturn(Optional.empty())
 
         assertThrows(VisitNotFoundException::class.java) {
-            service.createOrder(request)
+            service.createOrder(request, waiter.idUser)
         }
 
         verifyNoInteractions(
-            userClient,
             menuClient,
             orderRepository
         )
@@ -315,11 +313,10 @@ class OrderServiceTest {
             .thenReturn(Optional.of(visit))
 
         assertThrows(VisitAlreadyClosedException::class.java) {
-            service.createOrder(request)
+            service.createOrder(request, waiter.idUser)
         }
 
         verifyNoInteractions(
-            userClient,
             menuClient,
             orderRepository
         )
@@ -335,7 +332,7 @@ class OrderServiceTest {
             .thenReturn(Mono.error(RemoteBusinessException(404, "User 2 not found")))
 
         assertThrows(RemoteBusinessException::class.java) {
-            service.createOrder(request)
+            service.createOrder(request, waiter.idUser)
         }
 
         verifyNoInteractions(
@@ -345,63 +342,35 @@ class OrderServiceTest {
     }
 
     @Test
-    fun `missing worker prevents order persistence`() {
+    fun `a client cannot order for a different visit owner`() {
+        stubOpenVisit()
+        val otherClient = client.copy(idUser = 55)
+        doReturn(Mono.just(otherClient)).`when`(userClient).getUser(otherClient.idUser)
 
-        `when`(visitRepository.findById(4))
-            .thenReturn(Optional.of(visit))
-
-        `when`(userClient.getUser(2))
-            .thenReturn(Mono.just(waiter))
-
-        `when`(userClient.getUser(3))
-            .thenReturn(Mono.error(RemoteBusinessException(404, "User 3 not found")))
-
-        assertThrows(RemoteBusinessException::class.java) {
-            service.createOrder(request)
+        val failure = assertThrows(org.springframework.web.server.ResponseStatusException::class.java) {
+            service.createOrder(request, otherClient.idUser)
         }
 
-        verifyNoInteractions(
-            menuClient,
-            orderRepository
-        )
+        assertEquals(org.springframework.http.HttpStatus.FORBIDDEN, failure.statusCode)
+        verifyNoInteractions(menuClient, orderRepository)
     }
 
     @Test
-    fun `a client cannot act as waiter`() {
+    fun `a worker cannot place an order`() {
+        doReturn(Mono.just(worker)).`when`(userClient).getUser(worker.idUser)
 
-        waiter = waiter.copy(role = UserRole.CLIENT)
-        stubValidParticipants()
-
-        assertThrows(InvalidUserRoleException::class.java) {
-            service.createOrder(request)
+        val failure = assertThrows(org.springframework.web.server.ResponseStatusException::class.java) {
+            service.createOrder(request, worker.idUser)
         }
 
-        verifyNoInteractions(
-            menuClient,
-            orderRepository
-        )
-    }
-
-    @Test
-    fun `a waiter cannot act as preparation worker`() {
-
-        worker = worker.copy(role = UserRole.WAITER)
-        stubValidParticipants()
-
-        assertThrows(InvalidUserRoleException::class.java) {
-            service.createOrder(request)
-        }
-
-        verifyNoInteractions(
-            menuClient,
-            orderRepository
-        )
+        assertEquals(org.springframework.http.HttpStatus.FORBIDDEN, failure.statusCode)
+        verifyNoInteractions(visitRepository, menuClient, orderRepository)
     }
 
     @Test
     fun `missing menu item prevents saving a partial order`() {
 
-        stubValidParticipants()
+        stubOpenVisit()
 
         doReturn(Mono.just(cocktail))
             .`when`(menuClient).getMenuItem(10)
@@ -410,7 +379,7 @@ class OrderServiceTest {
             .`when`(menuClient).getMenuItem(11)
 
         assertThrows(RemoteBusinessException::class.java) {
-            service.createOrder(request)
+            service.createOrder(request, waiter.idUser)
         }
 
         verify(menuClient).getMenuItem(10)
@@ -419,15 +388,7 @@ class OrderServiceTest {
         verifyNoInteractions(orderRepository)
     }
 
-    private fun stubValidParticipants() {
-
-        `when`(visitRepository.findById(4))
-            .thenReturn(Optional.of(visit))
-
-        `when`(userClient.getUser(2))
-            .thenReturn(Mono.just(waiter))
-
-        `when`(userClient.getUser(3))
-            .thenReturn(Mono.just(worker))
+    private fun stubOpenVisit() {
+        doReturn(Optional.of(visit)).`when`(visitRepository).findById(4)
     }
 }

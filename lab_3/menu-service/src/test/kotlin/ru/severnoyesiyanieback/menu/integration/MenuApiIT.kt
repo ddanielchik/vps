@@ -12,7 +12,12 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Import
+import org.springframework.http.HttpHeaders
 import org.springframework.http.MediaType
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm
+import org.springframework.security.oauth2.jwt.JwsHeader
+import org.springframework.security.oauth2.jwt.JwtClaimsSet
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.transaction.PlatformTransactionManager
@@ -25,19 +30,28 @@ import ru.severnoyesiyanieback.menu.entity.MenuItem
 import ru.severnoyesiyanieback.menu.repository.MenuItemRepository
 import java.math.BigDecimal
 import java.time.Duration
+import java.time.Instant
+import ru.severnoyesiyanieback.menu.client.UserAccessClient
+import ru.severnoyesiyanieback.menu.client.UserAccessResponse
+import ru.severnoyesiyanieback.security.JWT_ISSUER
+import ru.severnoyesiyanieback.security.JwtKeys
 import reactor.core.publisher.Mono
 
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = [
         "spring.cloud.config.enabled=false", "spring.config.name=application-test", "eureka.client.enabled=false",
-        "spring.jpa.hibernate.ddl-auto=validate", "spring.jpa.open-in-view=false"
+        "spring.jpa.hibernate.ddl-auto=validate", "spring.jpa.open-in-view=false",
+        "app.jwt.secret=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     ]
 )
 @Import(MenuApiIT.Database::class)
 class MenuApiIT {
     @org.springframework.test.context.bean.override.mockito.MockitoBean
     private lateinit var visits: ru.severnoyesiyanieback.menu.client.VisitOrderClient
+
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private lateinit var users: UserAccessClient
 
     @TestConfiguration(proxyBeanMethods = false)
     class Database {
@@ -55,12 +69,35 @@ class MenuApiIT {
     private lateinit var repository: MenuItemRepository
     @Autowired
     private lateinit var transactionManager: PlatformTransactionManager
+    private lateinit var guest: WebTestClient
     private lateinit var client: WebTestClient
+    private val encoder = JwtKeys("0123456789abcdef".repeat(4)).encoder()
 
     @BeforeEach
     fun connectToServer() {
-        client = WebTestClient.bindToServer().baseUrl("http://localhost:$port")
+        guest = WebTestClient.bindToServer().baseUrl("http://localhost:$port")
             .responseTimeout(Duration.ofSeconds(10)).build()
+        doReturn(Mono.just(UserAccessResponse("LORD", "ACTIVE"))).`when`(users).getUserAccess(1)
+        client = guest.mutate().defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer ${token(1)}").build()
+    }
+
+    @Test
+    fun `menu is public and writes require an active lord`() {
+        val request = CreateMenuItemRequest("Restricted", BigDecimal.ONE, "Lime", setOf(1))
+        guest.get().uri("/api/v1/menu/1").exchange().expectStatus().isOk
+        guest.post().uri("/api/v1/menu").bodyValue(request).exchange().expectStatus().isUnauthorized
+        doReturn(Mono.just(UserAccessResponse("WAITER", "ACTIVE"))).`when`(users).getUserAccess(2)
+        guest.post().uri("/api/v1/menu").headers { headers -> headers.setBearerAuth(token(2)) }
+            .bodyValue(request).exchange().expectStatus().isForbidden
+        doReturn(Mono.just(UserAccessResponse("LORD", "BLOCKED"))).`when`(users).getUserAccess(1)
+        client.post().uri("/api/v1/menu").bodyValue(request).exchange().expectStatus().isForbidden
+    }
+
+    private fun token(userId: Int): String {
+        val claims = JwtClaimsSet.builder().issuer(JWT_ISSUER).subject(userId.toString())
+            .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300)).build()
+        val header = JwsHeader.with(MacAlgorithm.HS256).build()
+        return encoder.encode(JwtEncoderParameters.from(header, claims)).tokenValue
     }
 
     @Test

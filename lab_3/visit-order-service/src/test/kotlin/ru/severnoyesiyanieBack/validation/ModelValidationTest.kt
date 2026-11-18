@@ -33,7 +33,7 @@ class ModelValidationTest {
     fun `valid boundary values are accepted by request and entity validation`() {
         val validModels = listOf(
             CreateVisitRequest(1, 1), UpdateVisitRequest(1),
-            CreateOrderRequest(1, 2, 3, listOf(CreateOrderItemRequest(1, 1))),
+            CreateOrderRequest(1, listOf(CreateOrderItemRequest(1, 1))),
             TastePreference(1, "A".repeat(50)), Visit(clientId = 1, tableNumber = 1)
         )
         validModels.forEach { model ->
@@ -50,12 +50,10 @@ class ModelValidationTest {
                 Arguments.of(CreateVisitRequest(0, 1), "clientId"),
                 Arguments.of(CreateVisitRequest(1, 0), "tableNumber"),
                 Arguments.of(UpdateVisitRequest(-1), "tableNumber"),
-                Arguments.of(CreateOrderRequest(0, 2, 3, listOf(CreateOrderItemRequest(1, 1))), "visitId"),
-                Arguments.of(CreateOrderRequest(1, 0, 3, listOf(CreateOrderItemRequest(1, 1))), "waiterId"),
-                Arguments.of(CreateOrderRequest(1, 2, 0, listOf(CreateOrderItemRequest(1, 1))), "workerId"),
-                Arguments.of(CreateOrderRequest(1, 2, 3, emptyList()), "items"),
-                Arguments.of(CreateOrderRequest(1, 2, 3, listOf(CreateOrderItemRequest(0, 1))), "items[0].menuItemId"),
-                Arguments.of(CreateOrderRequest(1, 2, 3, listOf(CreateOrderItemRequest(1, 0))), "items[0].quantity"),
+                Arguments.of(CreateOrderRequest(0, listOf(CreateOrderItemRequest(1, 1))), "visitId"),
+                Arguments.of(CreateOrderRequest(1, emptyList()), "items"),
+                Arguments.of(CreateOrderRequest(1, listOf(CreateOrderItemRequest(0, 1))), "items[0].menuItemId"),
+                Arguments.of(CreateOrderRequest(1, listOf(CreateOrderItemRequest(1, 0))), "items[0].quantity"),
                 Arguments.of(Visit(clientId = 1, tableNumber = 0), "tableNumber"),
                 Arguments.of(Order(visit = visit, totalAmount = BigDecimal("-0.01")), "totalAmount"),
                 Arguments.of(OrderItem(order = order, menuItemId = 1, unitPrice = BigDecimal.ONE, quantity = 0), "quantity")

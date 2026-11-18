@@ -41,7 +41,7 @@ class VisitServiceTest {
     private var savedVisit: Visit? = null
 
     private val client = UserResponse(
-        1, "Client", "client@example.com", UserRole.CLIENT
+        1, UserRole.CLIENT
     )
 
     private val sweet = TastePreference(10, "Sweet")

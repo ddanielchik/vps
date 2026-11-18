@@ -29,7 +29,12 @@ class UserService(
         Mono.fromCallable { passwordEncoder.encode(request.password) }
             .subscribeOn(Schedulers.boundedElastic())
             .flatMap { passwordHash ->
-                userRepository.save(User(name = request.name, email = request.email, passwordHash = passwordHash))
+                userRepository.save(User(
+                    name = request.name,
+                    email = request.email,
+                    role = request.role,
+                    passwordHash = passwordHash
+                ))
             }
             .map(::toResponse)
             .onErrorMap(DuplicateKeyException::class.java) { UserAlreadyExistsException(request.email) }

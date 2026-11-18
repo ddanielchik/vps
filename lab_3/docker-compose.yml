@@ -81,6 +81,7 @@ services:
       CONFIG_SERVER_URL: http://config-service:8888
       EUREKA_URL: http://discovery-service:8761/eureka/
       EUREKA_HOSTNAME: menu-service
+      APP_JWT_SECRET: "${LAB3_JWT_SECRET:?Set LAB3_JWT_SECRET}"
       DB_USERNAME: menu
       DB_PASSWORD: menu
       DB_URL: jdbc:postgresql://menu-db:5432/menu
@@ -99,6 +100,7 @@ services:
       CONFIG_SERVER_URL: http://config-service:8888
       EUREKA_URL: http://discovery-service:8761/eureka/
       EUREKA_HOSTNAME: visit-order-service
+      APP_JWT_SECRET: "${LAB3_JWT_SECRET:?Set LAB3_JWT_SECRET}"
       DB_USERNAME: visits
       DB_PASSWORD: visits
       DB_URL: jdbc:postgresql://visits-db:5432/visits

@@ -9,62 +9,56 @@ import org.springframework.security.authorization.AuthorizationResult
 import org.springframework.security.config.web.server.ServerHttpSecurity
 import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.security.crypto.password.Pbkdf2PasswordEncoder
-import org.springframework.security.oauth2.jose.jws.MacAlgorithm
 import org.springframework.security.oauth2.jwt.JwtEncoder
-import org.springframework.security.oauth2.jwt.JwtValidators
-import org.springframework.security.oauth2.jwt.NimbusJwtEncoder
-import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder
 import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken
 import org.springframework.security.web.server.SecurityWebFilterChain
 import org.springframework.security.web.server.context.NoOpServerSecurityContextRepository
+import ru.severnoyesiyanieback.security.JwtKeys
 import ru.severnoyesiyanieback.user.entity.UserRole
 import ru.severnoyesiyanieback.user.entity.UserStatus
 import ru.severnoyesiyanieback.user.repository.UserRepository
-import java.util.HexFormat
-import javax.crypto.spec.SecretKeySpec
-
-internal const val JWT_ISSUER = "urn:severnoye-siyanie:lab3"
 
 @Configuration(proxyBeanMethods = false)
-class SecurityConfig(@Value("\${app.jwt.secret}") jwtSecret: String) {
-    private val signingKey = SecretKeySpec(
-        HexFormat.of().parseHex(jwtSecret.also {
-            require(it.matches(Regex("[0-9a-fA-F]{64}"))) { "APP_JWT_SECRET must contain 64 hex characters" }
-        }),
-        "HmacSHA256"
-    )
+class SecurityConfig(@Value("\${app.jwt.secret}") secret: String) {
+    private val jwtKeys = JwtKeys(secret)
 
     @Bean
     fun passwordEncoder(): PasswordEncoder = Pbkdf2PasswordEncoder.defaultsForSpringSecurity_v5_8()
 
     @Bean
-    fun jwtEncoder(): JwtEncoder = NimbusJwtEncoder.withSecretKey(signingKey)
-        .algorithm(MacAlgorithm.HS256).build()
+    fun jwtEncoder(): JwtEncoder = jwtKeys.encoder()
 
     @Bean
-    fun jwtDecoder(): ReactiveJwtDecoder = NimbusReactiveJwtDecoder.withSecretKey(signingKey)
-        .macAlgorithm(MacAlgorithm.HS256).build()
-        .apply { setJwtValidator(JwtValidators.createDefaultWithIssuer(JWT_ISSUER)) }
+    fun jwtDecoder(): ReactiveJwtDecoder = jwtKeys.reactiveDecoder()
 
     @Bean
     fun securityWebFilterChain(http: ServerHttpSecurity, users: UserRepository): SecurityWebFilterChain =
         http
-            .csrf { it.disable() }
+            .csrf { csrf -> csrf.disable() }
             .securityContextRepository(NoOpServerSecurityContextRepository.getInstance())
             .authorizeExchange { exchanges ->
-                exchanges.pathMatchers(HttpMethod.POST, "/api/v1/users", "/api/v1/users/**")
-                    .access { authentication, _ ->
+                exchanges.pathMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
+                    .pathMatchers(HttpMethod.GET, "/internal/v1/users/{userId}", "/v3/api-docs/**", "/actuator/health")
+                    .permitAll()
+                    .pathMatchers("/api/v1/users", "/api/v1/users/**")
+                    .access { authentication, context ->
                         authentication.ofType(JwtAuthenticationToken::class.java)
-                            .mapNotNull { it.name.toIntOrNull() }
+                            .mapNotNull { jwtAuthentication -> jwtAuthentication.name.toIntOrNull() }
                             .flatMap(users::findById)
-                            .map<AuthorizationResult> { user ->
-                                AuthorizationDecision(user.role == UserRole.LORD && user.status == UserStatus.ACTIVE)
+                            .map<AuthorizationResult> { currentUser ->
+                                val request = context.exchange.request
+                                val canReadOwnProfile = request.method == HttpMethod.GET &&
+                                    request.path.value() == "/api/v1/users/${currentUser.idUser}"
+                                AuthorizationDecision(
+                                    currentUser.status == UserStatus.ACTIVE &&
+                                        (currentUser.role == UserRole.LORD || canReadOwnProfile)
+                                )
                             }
                             .defaultIfEmpty(AuthorizationDecision(false))
                     }
-                    .anyExchange().permitAll()
+                    .anyExchange().denyAll()
             }
-            .oauth2ResourceServer { it.jwt {} }
+            .oauth2ResourceServer { resourceServer -> resourceServer.jwt {} }
             .build()
 }

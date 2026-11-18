@@ -220,6 +220,24 @@ class UserApiIT {
     }
 
     @Test
+    fun `a lord creates staff and only the owner or a lord reads the profile`() {
+        val request = CreateUserRequest("Waiter", "waiter@example.com", CLIENT_PASSWORD, UserRole.WAITER)
+        val employee = client.post().uri("/api/v1/users").bodyValue(request)
+            .exchange().expectStatus().isCreated.expectBody(UserResponse::class.java).returnResult().responseBody!!
+        assertEquals(UserRole.WAITER, employee.role)
+        val token = login(employee.email, CLIENT_PASSWORD)
+        val employeeClient = guest.mutate().defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer $token").build()
+
+        guest.get().uri("/api/v1/users").exchange().expectStatus().isUnauthorized
+        employeeClient.get().uri("/api/v1/users").exchange().expectStatus().isForbidden
+        employeeClient.get().uri("/api/v1/users/${employee.idUser}")
+            .exchange().expectStatus().isOk.expectBody().jsonPath("$.passwordHash").doesNotExist()
+        val supervisorId = repository.findByEmail(LORD_EMAIL).block()!!.idUser
+        employeeClient.get().uri("/api/v1/users/$supervisorId").exchange().expectStatus().isForbidden
+        employeeClient.delete().uri("/api/v1/users/$supervisorId").exchange().expectStatus().isForbidden
+    }
+
+    @Test
     fun `login rejects unknown addresses incorrect passwords and blocked accounts`() {
         val customer = create("anna@example.com")
         fun rejected(email: String, password: String) {

@@ -24,7 +24,7 @@ class GlobalExceptionHandler {
     fun handleNotFound(exception: RuntimeException): ResponseEntity<String> =
         ResponseEntity.status(HttpStatus.NOT_FOUND).body(exception.message)
 
-    @ExceptionHandler(VisitAlreadyClosedException::class, InvalidUserRoleException::class)
+    @ExceptionHandler(VisitAlreadyClosedException::class)
     fun handleConflict(exception: RuntimeException): ResponseEntity<String> =
         ResponseEntity.status(HttpStatus.CONFLICT).body(exception.message)
 

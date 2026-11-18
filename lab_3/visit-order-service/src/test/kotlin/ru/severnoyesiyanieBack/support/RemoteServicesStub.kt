@@ -45,9 +45,9 @@ class RemoteServicesStub : AutoCloseable {
         requestedTastes = emptySet()
     }
 
-    fun createUser(role: UserRole, email: String): Int {
+    fun createUser(role: UserRole): Int {
         val id = nextUserId.incrementAndGet()
-        users[id] = UserResponse(id, role.name, email, role)
+        users[id] = UserResponse(id, role)
         return id
     }
 
@@ -62,7 +62,7 @@ class RemoteServicesStub : AutoCloseable {
             val path = exchange.requestURI.path
             val id = path.substringAfterLast('/').toIntOrNull() ?: -1
             when {
-                path.startsWith("/api/v1/users/") && exchange.requestMethod == "GET" -> {
+                path.startsWith("/internal/v1/users/") && exchange.requestMethod == "GET" -> {
                     userRequests.incrementAndGet()
                     val failure = userFailureStatus.get()
                     if (failure > 0) reply(exchange, failure, mapOf("message" to "User service failed"))

@@ -23,15 +23,13 @@ class TransactionIT : ApiIntegrationSupport() {
     @Test
     fun `failure inserting an order item rolls back the already inserted order header`() {
         val visit = createVisit()
-        val waiter = createStaff("WAITER")
-        val worker = createStaff("WORKER")
         val item = createMenuItem()
-        val request = CreateOrderRequest(visit, waiter, worker, listOf(CreateOrderItemRequest(item, 3)))
+        val request = CreateOrderRequest(visit, listOf(CreateOrderItemRequest(item, 3)))
 
         // A deterministic database fault occurs after the IDENTITY order header has been inserted.
         jdbc.execute("ALTER TABLE order_items ADD CONSTRAINT test_reject_quantity CHECK (quantity < 3)")
         try {
-            assertThrows(DataIntegrityViolationException::class.java) { orderService.createOrder(request) }
+            assertThrows(DataIntegrityViolationException::class.java) { orderService.createOrder(request, waiterId) }
             assertEquals(true, jdbc.queryForObject("SELECT is_called FROM orders_id_order_seq", Boolean::class.java))
             assertEquals(0, count("orders"))
             assertEquals(0, count("order_items"))
@@ -41,7 +39,7 @@ class TransactionIT : ApiIntegrationSupport() {
         }
 
         // A subsequent real transaction can save the same otherwise valid request.
-        orderService.createOrder(request)
+        orderService.createOrder(request, waiterId)
         assertEquals(1, count("orders"))
         assertEquals(1, count("order_items"))
     }

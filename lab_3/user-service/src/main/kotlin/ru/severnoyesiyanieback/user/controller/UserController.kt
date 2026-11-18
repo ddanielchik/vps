@@ -21,9 +21,9 @@ import ru.severnoyesiyanieback.user.service.UserService
 
 @RestController
 @RequestMapping("/api/v1/users")
+@SecurityRequirement(name = "bearerAuth")
 class UserController(private val userService: UserService) {
     @PostMapping
-    @SecurityRequirement(name = "bearerAuth")
     @ResponseStatus(HttpStatus.CREATED)
     fun createUser(@Valid @RequestBody request: CreateUserRequest): Mono<UserResponse> =
         userService.createUser(request)
