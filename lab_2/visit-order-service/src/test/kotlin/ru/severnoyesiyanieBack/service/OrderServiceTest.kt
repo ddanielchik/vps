@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.mockito.Answers
 import org.mockito.Mockito.*
+import reactor.core.publisher.Mono
 import ru.severnoyesiyanieBack.dto.CreateOrderItemRequest
 import ru.severnoyesiyanieBack.dto.CreateOrderRequest
 import ru.severnoyesiyanieBack.dto.MenuItemResponse
@@ -114,10 +115,10 @@ class OrderServiceTest {
 
         stubValidParticipants()
 
-        doReturn(cocktail)
+        doReturn(Mono.just(cocktail))
             .`when`(menuClient).getMenuItem(10)
 
-        doReturn(lemonade)
+        doReturn(Mono.just(lemonade))
             .`when`(menuClient).getMenuItem(11)
 
         val response = service.createOrder(request)
@@ -190,7 +191,7 @@ class OrderServiceTest {
         order.idOrder = 20
         order.items.add(OrderItem(order = order, menuItemId = 10, unitPrice = BigDecimal("125.50"), quantity = 1))
         doReturn(Optional.of(order)).`when`(orderRepository).findById(20)
-        doReturn(cocktail).`when`(menuClient).getMenuItem(10)
+        doReturn(Mono.just(cocktail)).`when`(menuClient).getMenuItem(10)
         assertEquals("Aurora", service.getOrderById(20).items.single().name)
         assertEquals("Aurora", order.items.single().menuItemName)
         clearInvocations(menuClient)
@@ -201,7 +202,7 @@ class OrderServiceTest {
     @Test
     fun `blocked employee cannot create an order`() {
         stubValidParticipants()
-        doReturn(waiter.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED))
+        doReturn(Mono.just(waiter.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED)))
             .`when`(userClient).getUser(waiter.idUser)
         val error = assertThrows(org.springframework.web.server.ResponseStatusException::class.java) {
             service.createOrder(request)
@@ -235,7 +236,7 @@ class OrderServiceTest {
         )
 
         cocktail = cocktail.copy(price = BigDecimal("999.00"), name = "New name")
-        doReturn(cocktail).`when`(menuClient).getMenuItem(10)
+        doReturn(Mono.just(cocktail)).`when`(menuClient).getMenuItem(10)
 
         `when`(orderRepository.findById(20))
             .thenReturn(Optional.of(order))
@@ -331,7 +332,7 @@ class OrderServiceTest {
             .thenReturn(Optional.of(visit))
 
         `when`(userClient.getUser(2))
-            .thenThrow(RemoteBusinessException(404, "User 2 not found"))
+            .thenReturn(Mono.error(RemoteBusinessException(404, "User 2 not found")))
 
         assertThrows(RemoteBusinessException::class.java) {
             service.createOrder(request)
@@ -350,10 +351,10 @@ class OrderServiceTest {
             .thenReturn(Optional.of(visit))
 
         `when`(userClient.getUser(2))
-            .thenReturn(waiter)
+            .thenReturn(Mono.just(waiter))
 
         `when`(userClient.getUser(3))
-            .thenThrow(RemoteBusinessException(404, "User 3 not found"))
+            .thenReturn(Mono.error(RemoteBusinessException(404, "User 3 not found")))
 
         assertThrows(RemoteBusinessException::class.java) {
             service.createOrder(request)
@@ -402,10 +403,10 @@ class OrderServiceTest {
 
         stubValidParticipants()
 
-        doReturn(cocktail)
+        doReturn(Mono.just(cocktail))
             .`when`(menuClient).getMenuItem(10)
 
-        doThrow(RemoteBusinessException(404, "Menu item 11 not found"))
+        doReturn(Mono.error<MenuItemResponse>(RemoteBusinessException(404, "Menu item 11 not found")))
             .`when`(menuClient).getMenuItem(11)
 
         assertThrows(RemoteBusinessException::class.java) {
@@ -424,9 +425,9 @@ class OrderServiceTest {
             .thenReturn(Optional.of(visit))
 
         `when`(userClient.getUser(2))
-            .thenReturn(waiter)
+            .thenReturn(Mono.just(waiter))
 
         `when`(userClient.getUser(3))
-            .thenReturn(worker)
+            .thenReturn(Mono.just(worker))
     }
 }

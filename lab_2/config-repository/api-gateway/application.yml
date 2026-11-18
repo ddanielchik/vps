@@ -1,5 +1,3 @@
-server:
-  port: 8080
 spring:
   cloud:
     gateway:
@@ -9,17 +7,15 @@ spring:
             - id: users
               uri: lb://user-service
               predicates:
-                - Path=/api/users,/api/users/**
-                - Method=GET,POST,PUT,DELETE
+                - Path=/api/v1/users/**
             - id: menu
               uri: lb://menu-service
               predicates:
-                - Path=/api/menu,/api/menu/**
-                - Method=GET,POST,PUT,DELETE
+                - Path=/api/v1/menu/**
             - id: visits-orders
               uri: lb://visit-order-service
               predicates:
-                - Path=/api/visits,/api/visits/**,/api/orders,/api/orders/**
+                - Path=/api/v1/visits/**,/api/v1/orders/**
             - id: users-openapi
               uri: lb://user-service
               predicates:

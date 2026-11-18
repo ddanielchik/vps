@@ -23,6 +23,7 @@
         <java.version>21</java.version>
         <kotlin.version>2.3.21</kotlin.version>
         <spring-cloud.version>2025.1.4</spring-cloud.version>
+        <reactive-feign.version>4.2.1</reactive-feign.version>
         <springdoc.version>3.1.0</springdoc.version>
         <jacoco.version>0.8.15</jacoco.version>
     </properties>
@@ -34,6 +35,23 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.playtika.reactivefeign</groupId>
+                <artifactId>feign-reactor-spring-cloud-starter</artifactId>
+                <type>pom</type>
+                <version>${reactive-feign.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>com.playtika.reactivefeign</groupId>
+                        <artifactId>feign-reactor-webclient</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+            <dependency>
+                <groupId>com.playtika.reactivefeign</groupId>
+                <artifactId>feign-reactor-java11</artifactId>
+                <version>${reactive-feign.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

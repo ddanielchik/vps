@@ -7,12 +7,5 @@ spring:
     password: ${DB_PASSWORD:users}
   flyway:
     url: ${JDBC_URL:jdbc:postgresql://localhost:5432/users}
-    user: ${DB_USERNAME:users}
-    password: ${DB_PASSWORD:users}
-  cloud:
-    openfeign:
-      client:
-        config:
-          default:
-            connectTimeout: 1000
-            readTimeout: 2000
+    user: ${spring.r2dbc.username}
+    password: ${spring.r2dbc.password}

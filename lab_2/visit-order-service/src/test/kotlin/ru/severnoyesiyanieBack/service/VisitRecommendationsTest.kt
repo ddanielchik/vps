@@ -11,8 +11,10 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.verifyNoMoreInteractions
+import reactor.core.publisher.Mono
 import ru.severnoyesiyanieBack.dto.MenuItemResponse
 import ru.severnoyesiyanieBack.entity.TastePreference
+import ru.severnoyesiyanieBack.client.UserClient
 import ru.severnoyesiyanieBack.client.MenuClient
 import ru.severnoyesiyanieBack.entity.Visit
 import ru.severnoyesiyanieBack.entity.VisitStatus
@@ -22,13 +24,14 @@ import ru.severnoyesiyanieBack.repository.VisitRepository
 import java.math.BigDecimal
 import java.util.Optional
 
-class RecommendationServiceTest {
+class VisitRecommendationsTest {
 
     private val visitRepository = mock(VisitRepository::class.java)
     private val menuClient = mock(MenuClient::class.java)
 
-    private val service = RecommendationService(
+    private val service = VisitService(
         visitRepository,
+        mock(UserClient::class.java),
         menuClient
     )
 
@@ -89,7 +92,7 @@ class RecommendationServiceTest {
         doReturn(Optional.of(visit))
             .`when`(visitRepository).findById(7)
 
-        doReturn(expected)
+        doReturn(Mono.just(expected))
             .`when`(menuClient).getRecommendations(tastes)
 
         val result = service.getRecommendations(7)
@@ -109,7 +112,7 @@ class RecommendationServiceTest {
         doReturn(Optional.of(visit(TastePreference(1, "Sour"))))
             .`when`(visitRepository).findById(7)
 
-        doReturn(emptyList<MenuItemResponse>())
+        doReturn(Mono.just(emptyList<MenuItemResponse>()))
             .`when`(menuClient).getRecommendations(tastes)
 
         val result = service.getRecommendations(7)

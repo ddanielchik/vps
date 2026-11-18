@@ -2,31 +2,25 @@ package ru.severnoyesiyanieBack.controller
 
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
+import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.*
 import ru.severnoyesiyanieBack.dto.CreateVisitRequest
-import ru.severnoyesiyanieBack.dto.VisitResponse
-import ru.severnoyesiyanieBack.service.VisitService
-import org.springframework.http.ResponseEntity
+import ru.severnoyesiyanieBack.dto.MenuItemResponse
 import ru.severnoyesiyanieBack.dto.UpdateVisitRequest
 import ru.severnoyesiyanieBack.dto.VisitPreferencesRequest
-import ru.severnoyesiyanieBack.service.RecommendationService
-import ru.severnoyesiyanieBack.dto.MenuItemResponse
+import ru.severnoyesiyanieBack.dto.VisitResponse
+import ru.severnoyesiyanieBack.service.VisitService
 
 @RestController
-@RequestMapping("/api/visits")
-class VisitController(private val visitService: VisitService, private val recommendationService: RecommendationService) {
-
+@RequestMapping("/api/v1/visits")
+class VisitController(private val visitService: VisitService) {
     @GetMapping("/{id}")
-    fun getVisitById(@PathVariable id: Int): ResponseEntity<VisitResponse> {
-        return ResponseEntity.ok(visitService.getVisitById(id))
-    }
+    fun getVisitById(@PathVariable id: Int): VisitResponse = visitService.getVisitById(id)
 
     @PostMapping
-    fun openVisit(
-        @Valid @RequestBody request: CreateVisitRequest
-    ): ResponseEntity<VisitResponse> {
-        return ResponseEntity.status(HttpStatus.CREATED).body(visitService.openVisit(request))
-    }
+    @ResponseStatus(HttpStatus.CREATED)
+    fun openVisit(@Valid @RequestBody request: CreateVisitRequest): VisitResponse =
+        visitService.openVisit(request)
 
     @GetMapping
     fun getAllVisits(
@@ -45,25 +39,18 @@ class VisitController(private val visitService: VisitService, private val recomm
     fun updateTableNumber(
         @PathVariable id: Int,
         @Valid @RequestBody request: UpdateVisitRequest
-    ): ResponseEntity<VisitResponse> {
-        return ResponseEntity.ok(visitService.updateVisit(id, request))
-    }
+    ): VisitResponse = visitService.updateVisit(id, request)
 
     @PutMapping("/{id}/preferences")
     fun updateTastePreferences(
         @PathVariable id: Int,
         @Valid @RequestBody request: VisitPreferencesRequest
-    ): ResponseEntity<VisitResponse> {
-        return ResponseEntity.ok(visitService.updateTastePreferences(id, request))
-    }
+    ): VisitResponse = visitService.updateTastePreferences(id, request)
 
     @PostMapping("/{id}/close")
-    fun closeVisit(@PathVariable id: Int): ResponseEntity<VisitResponse> {
-        return ResponseEntity.ok(visitService.closeVisit(id))
-    }
+    fun closeVisit(@PathVariable id: Int): VisitResponse = visitService.closeVisit(id)
 
     @GetMapping("/{id}/recommendations")
-    fun getRecommendations(@PathVariable id: Int): ResponseEntity<List<MenuItemResponse>> {
-        return ResponseEntity.ok(recommendationService.getRecommendations(id))
-    }
+    fun getRecommendations(@PathVariable id: Int): List<MenuItemResponse> =
+        visitService.getRecommendations(id)
 }

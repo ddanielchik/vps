@@ -12,7 +12,7 @@ class FeignCircuitBreakerIT : ApiIntegrationSupport() {
     @Test
     fun `remote business errors retain their HTTP status and do not open circuit breaker`() {
         repeat(4) {
-            mockMvc.perform(post("/api/visits").contentType(MediaType.APPLICATION_JSON)
+            mockMvc.perform(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"clientId":999,"tableNumber":1}"""))
                 .andExpect(status().isNotFound)
                 .andExpect(jsonPath("$.message").value("User 999 not found"))
@@ -28,7 +28,7 @@ class FeignCircuitBreakerIT : ApiIntegrationSupport() {
         val user = createClient()
         remote.userFailureStatus.set(503)
         repeat(3) {
-            mockMvc.perform(post("/api/visits").contentType(MediaType.APPLICATION_JSON)
+            mockMvc.perform(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"clientId":$user,"tableNumber":1}"""))
                 .andExpect(status().isServiceUnavailable)
                 .andExpect(jsonPath("$.message").isNotEmpty)

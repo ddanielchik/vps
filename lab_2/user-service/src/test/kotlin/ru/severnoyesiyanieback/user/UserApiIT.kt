@@ -2,7 +2,6 @@ package ru.severnoyesiyanieback.user
 
 import jakarta.validation.ConstraintViolationException
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
@@ -23,6 +22,7 @@ import ru.severnoyesiyanieback.user.dto.UpdateUserRequest
 import ru.severnoyesiyanieback.user.dto.UserResponse
 import ru.severnoyesiyanieback.user.entity.User
 import ru.severnoyesiyanieback.user.entity.UserRole
+import ru.severnoyesiyanieback.user.entity.UserStatus
 import ru.severnoyesiyanieback.user.exception.UserAlreadyExistsException
 import ru.severnoyesiyanieback.user.repository.UserRepository
 import ru.severnoyesiyanieback.user.service.UserService
@@ -31,12 +31,11 @@ import java.time.Duration
 @Testcontainers
 @SpringBootTest(
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
-    properties = ["spring.config.name=application-test", "spring.cloud.config.enabled=false", "eureka.client.enabled=false"]
+    properties = [
+        "spring.config.name=application-test", "spring.cloud.config.enabled=false", "eureka.client.enabled=false"
+    ]
 )
 class UserApiIT {
-    @org.springframework.test.context.bean.override.mockito.MockitoBean
-    private lateinit var visits: ru.severnoyesiyanieback.user.client.VisitOrderClient
-
     @Autowired private lateinit var environment: Environment
     @Autowired private lateinit var repository: UserRepository
     @Autowired private lateinit var service: UserService
@@ -52,52 +51,78 @@ class UserApiIT {
     }
 
     @Test
-    fun `user CRUD retains response fields status codes and client role`() {
+    fun `create read and update retain response fields and client role`() {
         val created = create("anna@example.com")
         assertEquals(UserRole.CLIENT, created.role)
-        client.get().uri("/api/users/${created.idUser}").exchange().expectStatus().isOk
+        client.get().uri("/api/v1/users/${created.idUser}").exchange().expectStatus().isOk
             .expectBody().jsonPath("$.name").isEqualTo("Anna")
-        client.put().uri("/api/users/${created.idUser}").bodyValue(UpdateUserRequest("Renamed", "new@example.com"))
+        client.put().uri("/api/v1/users/${created.idUser}").bodyValue(UpdateUserRequest("Renamed", "new@example.com"))
             .exchange().expectStatus().isOk.expectBody().jsonPath("$.name").isEqualTo("Renamed")
             .jsonPath("$.email").isEqualTo("new@example.com").jsonPath("$.role").isEqualTo("CLIENT")
-        client.delete().uri("/api/users/${created.idUser}").exchange().expectStatus().isNoContent
-        client.get().uri("/api/users/${created.idUser}").exchange().expectStatus().isNotFound
+    }
+
+    @Test
+    fun `delete blocks the same account and PUT can restore it`() {
+        val user = create("anna@example.com")
+        val userPath = "/api/v1/users/${user.idUser}"
+        assertEquals(UserStatus.ACTIVE, user.status)
+
+        repeat(2) {
+            client.delete().uri(userPath).exchange().expectStatus().isNoContent.expectBody().isEmpty
+        }
+
+        val blocked = user.copy(status = UserStatus.BLOCKED)
+        client.get().uri(userPath).exchange().expectStatus().isOk
+            .expectBody(UserResponse::class.java).isEqualTo(blocked)
+        val listedUsers = client.get().uri("/api/v1/users").exchange().expectStatus().isOk
+            .expectBodyList(UserResponse::class.java).returnResult().responseBody
+        assertEquals(listOf(blocked), listedUsers)
+        assertEquals(UserStatus.BLOCKED, repository.findById(user.idUser).block()?.status)
+        client.post().uri("/api/v1/users").bodyValue(CreateUserRequest("Other", user.email))
+            .exchange().expectStatus().isEqualTo(409)
+
+        client.put().uri(userPath).bodyValue(UpdateUserRequest(user.name, user.email))
+            .exchange().expectStatus().isOk.expectBody(UserResponse::class.java).isEqualTo(blocked)
+        client.put().uri(userPath).bodyValue(UpdateUserRequest(user.name, user.email, UserStatus.ACTIVE))
+            .exchange().expectStatus().isOk.expectBody(UserResponse::class.java).isEqualTo(user)
+        assertEquals(UserStatus.ACTIVE, repository.findById(user.idUser).block()?.status)
+        assertEquals(1L, repository.count().block())
     }
 
     @Test
     fun `duplicate emails return conflict and failed update leaves the user unchanged`() {
         create("taken@example.com")
         val other = create("other@example.com")
-        client.post().uri("/api/users").bodyValue(CreateUserRequest("Other", "taken@example.com"))
+        client.post().uri("/api/v1/users").bodyValue(CreateUserRequest("Other", "taken@example.com"))
             .exchange().expectStatus().isEqualTo(409).expectBody().jsonPath("$.message").exists()
-        client.put().uri("/api/users/${other.idUser}").bodyValue(UpdateUserRequest("Changed", "taken@example.com"))
+        client.put().uri("/api/v1/users/${other.idUser}").bodyValue(UpdateUserRequest("Changed", "taken@example.com"))
             .exchange().expectStatus().isEqualTo(409)
-        client.get().uri("/api/users/${other.idUser}").exchange().expectStatus().isOk.expectBody()
+        client.get().uri("/api/v1/users/${other.idUser}").exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.name").isEqualTo("Anna").jsonPath("$.email").isEqualTo("other@example.com")
         assertEquals(2L, repository.count().block())
     }
 
     @Test
     fun `missing resources return the original error body`() {
-        client.get().uri("/api/users/2147483647").exchange().expectStatus().isNotFound
+        client.get().uri("/api/v1/users/2147483647").exchange().expectStatus().isNotFound
             .expectBody().jsonPath("$.message").isEqualTo("User with id 2147483647 does not exist")
-        client.put().uri("/api/users/2147483647").bodyValue(UpdateUserRequest("Anna", "anna@example.com"))
+        client.put().uri("/api/v1/users/2147483647").bodyValue(UpdateUserRequest("Anna", "anna@example.com"))
             .exchange().expectStatus().isNotFound
-        client.delete().uri("/api/users/2147483647").exchange().expectStatus().isNotFound
+        client.delete().uri("/api/v1/users/2147483647").exchange().expectStatus().isNotFound
     }
 
     @Test
     fun `invalid requests return readable errors and create no rows`() {
         for (request in listOf(CreateUserRequest("", "valid@example.com"), CreateUserRequest("Anna", "broken"),
             CreateUserRequest("x".repeat(51), "valid@example.com"))) {
-            client.post().uri("/api/users").bodyValue(request).exchange().expectStatus().isBadRequest
+            client.post().uri("/api/v1/users").bodyValue(request).exchange().expectStatus().isBadRequest
                 .expectBody().jsonPath("$.message").exists()
         }
         for (body in listOf("{", "{}", """{"name":"Anna","email":null}""")) {
-            client.post().uri("/api/users").contentType(MediaType.APPLICATION_JSON).bodyValue(body)
+            client.post().uri("/api/v1/users").contentType(MediaType.APPLICATION_JSON).bodyValue(body)
                 .exchange().expectStatus().isBadRequest.expectBody().jsonPath("$.message").exists()
         }
-        client.get().uri("/api/users/not-a-number").exchange().expectStatus().isBadRequest
+        client.get().uri("/api/v1/users/not-a-number").exchange().expectStatus().isBadRequest
             .expectBody().jsonPath("$.message").exists()
         assertEquals(0L, repository.count().block())
     }
@@ -105,7 +130,7 @@ class UserApiIT {
     @Test
     fun `employee update preserves role and enums are stored as strings`() {
         val employee = repository.save(User(name = "Worker", email = "worker@example.com", role = UserRole.WORKER)).block()!!
-        client.put().uri("/api/users/${employee.idUser}").bodyValue(UpdateUserRequest("Changed", employee.email))
+        client.put().uri("/api/v1/users/${employee.idUser}").bodyValue(UpdateUserRequest("Changed", employee.email))
             .exchange().expectStatus().isOk.expectBody().jsonPath("$.role").isEqualTo("WORKER")
         val storedRole = database.sql("SELECT role FROM users WHERE id_user = :id").bind("id", employee.idUser!!)
             .map { row, _ -> row.get("role", String::class.java)!! }.one().block()
@@ -134,12 +159,12 @@ class UserApiIT {
     fun `OpenAPI uses the gateway origin and exposes deletion`() {
         val body = client.get().uri("/v3/api-docs").exchange().expectStatus().isOk.expectBody(String::class.java)
             .returnResult().responseBody!!
-        org.junit.jupiter.api.Assertions.assertTrue(body.contains("/api/users"))
+        org.junit.jupiter.api.Assertions.assertTrue(body.contains("/api/v1/users"))
         client.get().uri("/v3/api-docs").exchange().expectStatus().isOk.expectBody()
             .jsonPath("$.servers[0].url").isEqualTo("/")
     }
 
-    private fun create(email: String): UserResponse = client.post().uri("/api/users")
+    private fun create(email: String): UserResponse = client.post().uri("/api/v1/users")
         .bodyValue(CreateUserRequest("Anna", email)).exchange().expectStatus().isCreated
         .expectBody(UserResponse::class.java).returnResult().responseBody!!
 

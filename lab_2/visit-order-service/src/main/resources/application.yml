@@ -1,5 +1,7 @@
 spring:
   application:
     name: visit-order-service
+  profiles:
+    include: reactive-feign
   config:
     import: "configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
