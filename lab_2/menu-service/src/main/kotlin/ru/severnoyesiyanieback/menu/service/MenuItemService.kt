@@ -5,7 +5,6 @@ import org.springframework.data.domain.Slice
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import ru.severnoyesiyanieback.menu.client.VisitOrderClient
-import feign.FeignException
 import org.springframework.stereotype.Service
 import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.support.TransactionTemplate
@@ -65,9 +64,9 @@ class MenuItemService(
     }
 
     fun deleteMenuItem(idPosition: Int): Mono<Void> = getMenuItemById(idPosition).flatMap {
-        Mono.fromCallable { visitOrderClient.hasMenuItemsWithoutName(idPosition) }
-            .subscribeOn(Schedulers.boundedElastic())
-            .onErrorMap(FeignException::class.java) {
+        visitOrderClient.hasMenuItemsWithoutName(idPosition)
+            .switchIfEmpty(Mono.error(IllegalStateException("Empty reference check response")))
+            .onErrorMap {
                 ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Cannot check menu references", it)
             }
             .flatMap { inUse ->
@@ -84,7 +83,7 @@ class MenuItemService(
         if (preferredTastes.isEmpty()) {
             emptyList()
         } else {
-            menuItemRepository.findByTasteTags(
+            menuItemRepository.findDistinctByTasteTags_NameIn(
                 preferredTastes,
                 PageRequest.of(0, 50, Sort.by("idPosition"))
             ).content.map(::toResponse)
@@ -105,7 +104,7 @@ class MenuItemService(
         .idPosition(requireNotNull(item.idPosition))
         .name(item.name)
         .price(item.price)
-        .ingredients(requireNotNull(item.ingredients))
+        .ingredients(item.ingredients.orEmpty())
         .tasteTags(item.tasteTags.map { it.name }.sorted())
         .build()
 

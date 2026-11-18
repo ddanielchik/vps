@@ -8,7 +8,7 @@ import ru.severnoyesiyanieBack.dto.OrderResponse
 import ru.severnoyesiyanieBack.service.OrderService
 
 @RestController
-@RequestMapping("/api/orders")
+@RequestMapping("/api/v1/orders")
 class OrderController(private val orderService: OrderService) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

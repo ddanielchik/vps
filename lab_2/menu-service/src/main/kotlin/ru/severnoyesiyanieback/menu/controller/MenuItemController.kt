@@ -21,7 +21,7 @@ import ru.severnoyesiyanieback.menu.dto.MenuItemResponse
 import ru.severnoyesiyanieback.menu.service.MenuItemService
 
 @RestController
-@RequestMapping("/api/menu")
+@RequestMapping("/api/v1/menu")
 class MenuItemController(private val menuItemService: MenuItemService) {
     @GetMapping("/{idPosition}")
     fun getMenuItemById(@PathVariable idPosition: Int): Mono<MenuItemResponse> =

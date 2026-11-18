@@ -7,15 +7,12 @@ import org.mockito.Mockito.doReturn
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
+import org.mockito.Mockito.verifyNoMoreInteractions
 import org.springframework.dao.DuplicateKeyException
 import org.springframework.transaction.ReactiveTransaction
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import reactor.core.publisher.Flux
-import ru.severnoyesiyanieback.user.client.VisitOrderClient
-import ru.severnoyesiyanieback.user.entity.UserStatus
-import org.springframework.web.server.ResponseStatusException
-import org.springframework.http.HttpStatus
 import reactor.core.publisher.Mono
 import reactor.test.StepVerifier
 import ru.severnoyesiyanieback.user.dto.CreateUserRequest
@@ -23,13 +20,13 @@ import ru.severnoyesiyanieback.user.dto.UpdateUserRequest
 import ru.severnoyesiyanieback.user.dto.UserResponse
 import ru.severnoyesiyanieback.user.entity.User
 import ru.severnoyesiyanieback.user.entity.UserRole
+import ru.severnoyesiyanieback.user.entity.UserStatus
 import ru.severnoyesiyanieback.user.exception.UserAlreadyExistsException
 import ru.severnoyesiyanieback.user.exception.UserNotFoundException
 import ru.severnoyesiyanieback.user.repository.UserRepository
 import ru.severnoyesiyanieback.user.service.UserService
 
 class UserServiceTest {
-    private val visits = mock(VisitOrderClient::class.java)
     private val repository = mock(UserRepository::class.java)
     private val transactionManager = mock(ReactiveTransactionManager::class.java)
     private val transaction = mock(ReactiveTransaction::class.java)
@@ -40,7 +37,7 @@ class UserServiceTest {
             .getReactiveTransaction(any(TransactionDefinition::class.java))
         doReturn(Mono.empty<Void>()).`when`(transactionManager).commit(transaction)
         doReturn(Mono.empty<Void>()).`when`(transactionManager).rollback(transaction)
-        service = UserService(repository, visits, transactionManager)
+        service = UserService(repository, transactionManager)
     }
 
     @Test
@@ -86,7 +83,7 @@ class UserServiceTest {
     fun `update preserves the identity and role and commits`() {
         val original = user(role = UserRole.WORKER)
         val changed = original.copy(name = "New name", email = "new@example.com")
-        doReturn(Mono.just(original)).`when`(repository).findById(7)
+        doReturn(Mono.just(original)).`when`(repository).findByIdForUpdate(7)
         doReturn(Mono.just(changed)).`when`(repository).save(changed)
         StepVerifier.create(service.updateUser(7, UpdateUserRequest(changed.name, changed.email)))
             .expectNext(UserResponse(7, changed.name, changed.email, UserRole.WORKER)).verifyComplete()
@@ -98,7 +95,7 @@ class UserServiceTest {
     fun `update with unchanged email succeeds`() {
         val original = user()
         val changed = original.copy(name = "Renamed")
-        doReturn(Mono.just(original)).`when`(repository).findById(7)
+        doReturn(Mono.just(original)).`when`(repository).findByIdForUpdate(7)
         doReturn(Mono.just(changed)).`when`(repository).save(changed)
         StepVerifier.create(service.updateUser(7, UpdateUserRequest(changed.name, changed.email)))
             .expectNext(UserResponse(7, changed.name, changed.email, UserRole.CLIENT)).verifyComplete()
@@ -108,7 +105,7 @@ class UserServiceTest {
     fun `duplicate email on update rolls back and keeps original immutable`() {
         val original = user()
         val changed = original.copy(name = "Changed", email = "taken@example.com")
-        doReturn(Mono.just(original)).`when`(repository).findById(7)
+        doReturn(Mono.just(original)).`when`(repository).findByIdForUpdate(7)
         doReturn(Mono.error<User>(DuplicateKeyException("users_email_key"))).`when`(repository).save(changed)
         StepVerifier.create(service.updateUser(7, UpdateUserRequest(changed.name, changed.email)))
             .expectError(UserAlreadyExistsException::class.java).verify()
@@ -118,27 +115,32 @@ class UserServiceTest {
 
     @Test
     fun `missing update rolls back`() {
-        doReturn(Mono.empty<User>()).`when`(repository).findById(404)
+        doReturn(Mono.empty<User>()).`when`(repository).findByIdForUpdate(404)
         StepVerifier.create(service.updateUser(404, UpdateUserRequest("Anna", "anna@example.com")))
             .expectError(UserNotFoundException::class.java).verify()
         verify(transactionManager).rollback(transaction)
     }
 
     @Test
-    fun `delete loads and deletes the entity and commits`() {
-        val user = user()
-        doReturn(Mono.just(user)).`when`(repository).findById(7)
-        doReturn(Mono.empty<Void>()).`when`(repository).delete(user)
+    fun `delete changes only the user status and commits`() {
+        val original = user(role = UserRole.WORKER)
+        val blocked = original.copy(status = UserStatus.BLOCKED)
+        doReturn(Mono.just(original)).`when`(repository).findByIdForUpdate(7)
+        doReturn(Mono.just(blocked)).`when`(repository).save(blocked)
+
         StepVerifier.create(service.deleteUser(7)).verifyComplete()
-        verify(repository).delete(user)
+
+        verify(repository).findByIdForUpdate(7)
+        verify(repository).save(blocked)
+        verifyNoMoreInteractions(repository)
         verify(transactionManager).commit(transaction)
     }
 
     @Test
-    fun `missing delete does not call other services`() {
-        doReturn(Mono.empty<User>()).`when`(repository).findById(404)
+    fun `missing delete rolls back`() {
+        doReturn(Mono.empty<User>()).`when`(repository).findByIdForUpdate(404)
         StepVerifier.create(service.deleteUser(404)).expectError(UserNotFoundException::class.java).verify()
-        verifyNoInteractions(visits, transactionManager)
+        verify(transactionManager).rollback(transaction)
     }
 
     @Test
@@ -157,7 +159,7 @@ class UserServiceTest {
     @Test
     fun `status can be changed and is preserved when omitted`() {
         val original = user().copy(status = UserStatus.BLOCKED)
-        doReturn(Mono.just(original)).`when`(repository).findById(7)
+        doReturn(Mono.just(original)).`when`(repository).findByIdForUpdate(7)
         doReturn(Mono.just(original)).`when`(repository).save(original)
         StepVerifier.create(service.updateUser(7, UpdateUserRequest(original.name, original.email)))
             .expectNextMatches { it.status == UserStatus.BLOCKED }.verifyComplete()
@@ -168,12 +170,14 @@ class UserServiceTest {
     }
 
     @Test
-    fun `referenced user cannot be deleted`() {
-        doReturn(Mono.just(user())).`when`(repository).findById(7)
-        doReturn(true).`when`(visits).isUserInUse(7)
-        StepVerifier.create(service.deleteUser(7))
-            .expectErrorMatches { it is ResponseStatusException && it.statusCode == HttpStatus.CONFLICT }.verify()
-        verify(repository, org.mockito.Mockito.never()).delete(user())
+    fun `repeated delete leaves the blocked account as is`() {
+        doReturn(Mono.just(user().copy(status = UserStatus.BLOCKED))).`when`(repository).findByIdForUpdate(7)
+
+        StepVerifier.create(service.deleteUser(7)).verifyComplete()
+
+        verify(repository).findByIdForUpdate(7)
+        verifyNoMoreInteractions(repository)
+        verify(transactionManager).commit(transaction)
     }
 
     private fun user(role: UserRole = UserRole.CLIENT) =

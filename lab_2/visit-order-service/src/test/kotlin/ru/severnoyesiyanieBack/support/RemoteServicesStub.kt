@@ -62,22 +62,22 @@ class RemoteServicesStub : AutoCloseable {
             val path = exchange.requestURI.path
             val id = path.substringAfterLast('/').toIntOrNull() ?: -1
             when {
-                path.startsWith("/api/users/") && exchange.requestMethod == "GET" -> {
+                path.startsWith("/api/v1/users/") && exchange.requestMethod == "GET" -> {
                     userRequests.incrementAndGet()
                     val failure = userFailureStatus.get()
                     if (failure > 0) reply(exchange, failure, mapOf("message" to "User service failed"))
                     else users[id]?.let { reply(exchange, 200, it) }
                         ?: reply(exchange, 404, mapOf("message" to "User $id not found"))
                 }
-                path.startsWith("/api/menu/") && id >= 0 -> menu[id]?.let { reply(exchange, 200, it) }
+                path.startsWith("/api/v1/menu/") && id >= 0 -> menu[id]?.let { reply(exchange, 200, it) }
                     ?: reply(exchange, 404, mapOf("message" to "Cocktail $id not found"))
-                path == "/api/menu/tags" -> {
+                path == "/api/v1/menu/tags" -> {
                     val ids = query(exchange, "ids").map(String::toInt).toSet()
                     val selected = tags.filter { it.idTag in ids }
                     if (selected.size == ids.size) reply(exchange, 200, selected)
                     else reply(exchange, 400, "Some specified taste tags were not found")
                 }
-                path == "/api/menu/recommendations" -> {
+                path == "/api/v1/menu/recommendations" -> {
                     requestedTastes = query(exchange, "tastes").toSet()
                     reply(exchange, 200, recommendations)
                 }

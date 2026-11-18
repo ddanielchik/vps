@@ -5,7 +5,6 @@ import io.swagger.v3.oas.annotations.servers.Server
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
 
-@org.springframework.cloud.openfeign.EnableFeignClients
 @SpringBootApplication
 @OpenAPIDefinition(servers = [Server(url = "/")])
 class UserServiceApplication

@@ -19,7 +19,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
     fun `visit can be opened read moved given preferences and closed`() {
         val clientId = createClient()
         val visitId = createVisit(clientId)
-        mockMvc.perform(get("/api/visits/$visitId"))
+        mockMvc.perform(get("/api/v1/visits/$visitId"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.clientId").value(clientId))
             .andExpect(jsonPath("$.status").value("OPEN"))
@@ -28,15 +28,15 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         assertEquals("OPEN", jdbc.queryForObject("SELECT status FROM visits WHERE id_visit = ?", String::class.java, visitId))
 
         mockMvc.perform(
-            put("/api/visits/$visitId").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":9}""")
+            put("/api/v1/visits/$visitId").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":9}""")
         ).andExpect(status().isOk).andExpect(jsonPath("$.tableNumber").value(9))
         mockMvc.perform(
-            put("/api/visits/$visitId/preferences").contentType(MediaType.APPLICATION_JSON)
+            put("/api/v1/visits/$visitId/preferences").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"tasteTagIds":[1,2]}""")
         ).andExpect(status().isOk).andExpect(jsonPath("$.tastePreferences.length()").value(2))
         assertEquals(2, count("visit_taste_preferences"))
 
-        mockMvc.perform(post("/api/visits/$visitId/close"))
+        mockMvc.perform(post("/api/v1/visits/$visitId/close"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.status").value("CLOSED"))
             .andExpect(jsonPath("$.closedAt").isNotEmpty)
@@ -52,7 +52,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         "{\"clientId\":1,\"tableNumber\":-1}"
     ])
     fun `invalid visit input returns bad request`(body: String) {
-        mockMvc.perform(post("/api/visits").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isBadRequest).andExpect(jsonPath("$.message").isNotEmpty)
         assertEquals(0, count("visits"))
     }
@@ -61,7 +61,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
     fun `invalid table update leaves the saved table unchanged`() {
         val id = createVisit()
         mockMvc.perform(
-            put("/api/visits/$id").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":0}""")
+            put("/api/v1/visits/$id").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":0}""")
         ).andExpect(status().isBadRequest)
         assertEquals(4, jdbc.queryForObject("SELECT table_number FROM visits WHERE id_visit = ?", Int::class.java, id))
     }
@@ -69,34 +69,34 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
     @Test
     fun `closed visits reject repeated close updates preferences and recommendations`() {
         val id = createVisit()
-        mockMvc.perform(post("/api/visits/$id/close")).andExpect(status().isOk)
+        mockMvc.perform(post("/api/v1/visits/$id/close")).andExpect(status().isOk)
         val closedAt = jdbc.queryForObject("SELECT closed_at FROM visits WHERE id_visit = ?", java.sql.Timestamp::class.java, id)
 
-        mockMvc.perform(post("/api/visits/$id/close")).andExpect(status().isConflict)
+        mockMvc.perform(post("/api/v1/visits/$id/close")).andExpect(status().isConflict)
         mockMvc.perform(
-            put("/api/visits/$id").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":9}""")
+            put("/api/v1/visits/$id").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":9}""")
         ).andExpect(status().isConflict)
         mockMvc.perform(
-            put("/api/visits/$id/preferences").contentType(MediaType.APPLICATION_JSON).content("""{"tasteTagIds":[1]}""")
+            put("/api/v1/visits/$id/preferences").contentType(MediaType.APPLICATION_JSON).content("""{"tasteTagIds":[1]}""")
         ).andExpect(status().isConflict)
-        mockMvc.perform(get("/api/visits/$id/recommendations")).andExpect(status().isConflict)
+        mockMvc.perform(get("/api/v1/visits/$id/recommendations")).andExpect(status().isConflict)
         assertEquals(closedAt, jdbc.queryForObject("SELECT closed_at FROM visits WHERE id_visit = ?", java.sql.Timestamp::class.java, id))
         assertEquals(4, jdbc.queryForObject("SELECT table_number FROM visits WHERE id_visit = ?", Int::class.java, id))
     }
 
     @Test
     fun `unknown visit and client references return not found`() {
-        mockMvc.perform(get("/api/visits/999")).andExpect(status().isNotFound)
-        mockMvc.perform(post("/api/visits/999/close")).andExpect(status().isNotFound)
-        mockMvc.perform(get("/api/visits/999/recommendations")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/api/v1/visits/999")).andExpect(status().isNotFound)
+        mockMvc.perform(post("/api/v1/visits/999/close")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/api/v1/visits/999/recommendations")).andExpect(status().isNotFound)
         mockMvc.perform(
-            put("/api/visits/999").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":1}""")
+            put("/api/v1/visits/999").contentType(MediaType.APPLICATION_JSON).content("""{"tableNumber":1}""")
         ).andExpect(status().isNotFound)
         mockMvc.perform(
-            put("/api/visits/999/preferences").contentType(MediaType.APPLICATION_JSON).content("""{"tasteTagIds":[1]}""")
+            put("/api/v1/visits/999/preferences").contentType(MediaType.APPLICATION_JSON).content("""{"tasteTagIds":[1]}""")
         ).andExpect(status().isNotFound)
         mockMvc.perform(
-            post("/api/visits").contentType(MediaType.APPLICATION_JSON).content("""{"clientId":999,"tableNumber":1}""")
+            post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON).content("""{"clientId":999,"tableNumber":1}""")
         ).andExpect(status().isNotFound)
     }
 
@@ -104,7 +104,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
     fun `preferences replace old values and can be cleared but unknown tags preserve them`() {
         val id = createVisit()
         fun setPreferences(tags: String) = mockMvc.perform(
-            put("/api/visits/$id/preferences").contentType(MediaType.APPLICATION_JSON)
+            put("/api/v1/visits/$id/preferences").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"tasteTagIds":[$tags]}""")
         )
         setPreferences("1,2").andExpect(status().isOk)
@@ -129,33 +129,33 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
             """.trimIndent(),
             clientId
         )
-        mockMvc.perform(get("/api/visits").param("size", "100"))
+        mockMvc.perform(get("/api/v1/visits").param("size", "100"))
             .andExpect(status().isOk).andExpect(header().string("X-Total-Count", "53"))
             .andExpect(jsonPath("$.length()").value(50))
             .andExpect(jsonPath("$[0].idVisit").value(1))
-        mockMvc.perform(get("/api/visits").param("page", "1").param("size", "50"))
+        mockMvc.perform(get("/api/v1/visits").param("page", "1").param("size", "50"))
             .andExpect(status().isOk).andExpect(header().string("X-Total-Count", "53"))
             .andExpect(jsonPath("$.length()").value(3))
             .andExpect(jsonPath("$[0].idVisit").value(51))
-        mockMvc.perform(get("/api/visits").param("page", "2").param("size", "50"))
+        mockMvc.perform(get("/api/v1/visits").param("page", "2").param("size", "50"))
             .andExpect(status().isOk).andExpect(jsonPath("$").isEmpty)
-        mockMvc.perform(get("/api/visits").param("size", "0"))
+        mockMvc.perform(get("/api/v1/visits").param("size", "0"))
             .andExpect(status().isOk).andExpect(jsonPath("$.length()").value(1))
-        mockMvc.perform(get("/api/visits").param("page", "-1")).andExpect(status().isBadRequest)
+        mockMvc.perform(get("/api/v1/visits").param("page", "-1")).andExpect(status().isBadRequest)
     }
 
     @Test
     fun `recommendations forward visit tastes to the menu service`() {
         val visitId = createVisit()
         val matching = createMenuItem(tags = "1,2")
-        mockMvc.perform(get("/api/visits/$visitId/recommendations"))
+        mockMvc.perform(get("/api/v1/visits/$visitId/recommendations"))
             .andExpect(status().isOk).andExpect(jsonPath("$").isEmpty)
         mockMvc.perform(
-            put("/api/visits/$visitId/preferences").contentType(MediaType.APPLICATION_JSON)
+            put("/api/v1/visits/$visitId/preferences").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"tasteTagIds":[1,2]}""")
         ).andExpect(status().isOk)
         remote.recommendations = listOf(remote.menu.getValue(matching))
-        mockMvc.perform(get("/api/visits/$visitId/recommendations"))
+        mockMvc.perform(get("/api/v1/visits/$visitId/recommendations"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.length()").value(1))
             .andExpect(jsonPath("$[0].idPosition").value(matching))
@@ -170,7 +170,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         val first = createMenuItem(price = "125.50")
         val second = createMenuItem(name = "Second drink", price = "99.90")
         val body = """{"visitId":$visit,"waiterId":$waiter,"workerId":$worker,"items":[{"menuItemId":$first,"quantity":2},{"menuItemId":$second,"quantity":3}]}"""
-        val result = mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        val result = mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isCreated)
             .andExpect(jsonPath("$.visitId").value(visit))
             .andExpect(jsonPath("$.waiterId").value(waiter))
@@ -186,7 +186,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         assertEquals(2, count("order_items"))
 
         remote.menu[first] = remote.menu.getValue(first).copy(name = "Updated name", price = BigDecimal("999.99"))
-        val savedOrder = json(mockMvc.perform(get("/api/orders/$orderId"))
+        val savedOrder = json(mockMvc.perform(get("/api/v1/orders/$orderId"))
             .andExpect(status().isOk)
             .andExpect(jsonPath("$.totalAmount").value(550.7)))
         val savedItem = savedOrder["items"].single { it["menuItemId"].asInt() == first }
@@ -206,7 +206,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         "{\"visitId\":1,\"waiterId\":1,\"workerId\":2,\"items\":[{\"menuItemId\":1,\"quantity\":0}]}"
     ])
     fun `order request validates IDs empty items and nested quantities`(body: String) {
-        mockMvc.perform(post("/api/orders").contentType(MediaType.APPLICATION_JSON).content(body))
+        mockMvc.perform(post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON).content(body))
             .andExpect(status().isBadRequest).andExpect(jsonPath("$.message").isNotEmpty)
         assertEquals(0, count("orders"))
     }
@@ -219,7 +219,7 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         val worker = createStaff("WORKER")
         val item = createMenuItem()
         fun order(visitId: Int = visit, waiterId: Int = waiter, workerId: Int = worker, itemId: Int = item) = mockMvc.perform(
-            post("/api/orders").contentType(MediaType.APPLICATION_JSON)
+            post("/api/v1/orders").contentType(MediaType.APPLICATION_JSON)
                 .content("""{"visitId":$visitId,"waiterId":$waiterId,"workerId":$workerId,"items":[{"menuItemId":$itemId,"quantity":1}]}""")
         )
         order(waiterId = client).andExpect(status().isConflict)
@@ -228,9 +228,9 @@ class VisitAndOrderApiIT : ApiIntegrationSupport() {
         order(workerId = 999).andExpect(status().isNotFound)
         order(itemId = 999).andExpect(status().isNotFound)
         order(visitId = 999).andExpect(status().isNotFound)
-        mockMvc.perform(post("/api/visits/$visit/close")).andExpect(status().isOk)
+        mockMvc.perform(post("/api/v1/visits/$visit/close")).andExpect(status().isOk)
         order().andExpect(status().isConflict)
-        mockMvc.perform(get("/api/orders/999")).andExpect(status().isNotFound)
+        mockMvc.perform(get("/api/v1/orders/999")).andExpect(status().isNotFound)
         assertEquals(0, count("orders"))
         assertEquals(0, count("order_items"))
     }

@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 
 class RemoteErrorDecoderTest {
     private val decoder = RemoteErrorDecoder()
-    private val request = Request.create(Request.HttpMethod.GET, "http://localhost/api/users/7", emptyMap(), null, UTF_8, RequestTemplate())
+    private val request = Request.create(Request.HttpMethod.GET, "http://localhost/api/v1/users/7", emptyMap(), null, UTF_8, RequestTemplate())
 
     @Test
     fun `business response retains status body and content type`() {

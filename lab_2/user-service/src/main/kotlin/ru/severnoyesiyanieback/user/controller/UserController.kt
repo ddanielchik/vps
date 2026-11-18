@@ -1,5 +1,6 @@
 package ru.severnoyesiyanieback.user.controller
 
+import io.swagger.v3.oas.annotations.Operation
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -19,7 +20,7 @@ import ru.severnoyesiyanieback.user.dto.UserResponse
 import ru.severnoyesiyanieback.user.service.UserService
 
 @RestController
-@RequestMapping("/api/users")
+@RequestMapping("/api/v1/users")
 class UserController(private val userService: UserService) {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

@@ -11,6 +11,7 @@ import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
 import org.springframework.http.HttpStatus
 import org.springframework.web.server.ResponseStatusException
+import reactor.core.publisher.Mono
 import ru.severnoyesiyanieBack.dto.CreateVisitRequest
 import ru.severnoyesiyanieBack.dto.UpdateVisitRequest
 import ru.severnoyesiyanieBack.dto.VisitPreferencesRequest
@@ -86,7 +87,7 @@ class VisitServiceTest {
 
     @Test
     fun `blocked client cannot open a visit`() {
-        doReturn(client.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED))
+        doReturn(Mono.just(client.copy(status = ru.severnoyesiyanieBack.entity.UserStatus.BLOCKED)))
             .`when`(userClient).getUser(client.idUser)
         val error = assertThrows(ResponseStatusException::class.java) {
             service.openVisit(CreateVisitRequest(client.idUser, 1))
@@ -97,7 +98,7 @@ class VisitServiceTest {
 
     @Test
     fun `opening a visit creates an open visit for the requested client and table`() {
-        doReturn(client)
+        doReturn(Mono.just(client))
             .`when`(userClient).getUser(1)
 
         val before = LocalDateTime.now()
@@ -127,7 +128,7 @@ class VisitServiceTest {
 
     @Test
     fun `opening a visit for a missing client does not save anything`() {
-        doThrow(RemoteBusinessException(404, "User 99 not found"))
+        doReturn(Mono.error<UserResponse>(RemoteBusinessException(404, "User 99 not found")))
             .`when`(userClient).getUser(99)
 
         assertThrows(RemoteBusinessException::class.java) {
@@ -384,7 +385,7 @@ class VisitServiceTest {
         `when`(visitRepository.findById(4))
             .thenReturn(Optional.of(visit))
 
-        doReturn(listOf(sour, bitter).map { TasteTagResponse(it.idTag, it.name) })
+        doReturn(Mono.just(listOf(sour, bitter).map { TasteTagResponse(it.idTag, it.name) }))
             .`when`(menuClient).getTags(ids)
 
         val response = service.updateTastePreferences(
@@ -433,7 +434,7 @@ class VisitServiceTest {
         `when`(visitRepository.findById(4))
             .thenReturn(Optional.of(visit))
 
-        doReturn(listOf(TasteTagResponse(sour.idTag, sour.name)))
+        doReturn(Mono.just(listOf(TasteTagResponse(sour.idTag, sour.name))))
             .`when`(menuClient).getTags(ids)
 
         assertThrows(TasteTagsNotFoundException::class.java) {

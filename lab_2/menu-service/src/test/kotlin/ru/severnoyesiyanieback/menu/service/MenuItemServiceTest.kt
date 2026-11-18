@@ -2,6 +2,7 @@ package ru.severnoyesiyanieback.menu.service
 
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.Test
+import reactor.core.publisher.Mono
 import ru.severnoyesiyanieback.menu.client.VisitOrderClient
 import org.mockito.Answers
 import org.mockito.Mockito.*
@@ -154,6 +155,7 @@ class MenuItemServiceTest {
     fun `delete removes loaded item after subscription`() {
         val item = menuItem()
         doReturn(Optional.of(item)).`when`(menuRepository).findById(7)
+        doReturn(Mono.just(false)).`when`(visits).hasMenuItemsWithoutName(7)
         val result = service.deleteMenuItem(7)
         verifyNoInteractions(menuRepository)
         result.block()
@@ -164,7 +166,7 @@ class MenuItemServiceTest {
     fun `referenced menu item cannot be deleted`() {
         val item = menuItem()
         doReturn(Optional.of(item)).`when`(menuRepository).findById(7)
-        doReturn(true).`when`(visits).hasMenuItemsWithoutName(7)
+        doReturn(Mono.just(true)).`when`(visits).hasMenuItemsWithoutName(7)
         val error = assertThrows(ResponseStatusException::class.java) { service.deleteMenuItem(7).block() }
         assertEquals(HttpStatus.CONFLICT, error.statusCode)
         verify(menuRepository, never()).delete(item)
@@ -191,7 +193,7 @@ class MenuItemServiceTest {
     fun `recommendations use at most fifty sorted records`() {
         val tastes = setOf("SWEET", "SOUR")
         val pageable = PageRequest.of(0, 50, Sort.by("idPosition"))
-        doReturn(SliceImpl(listOf(menuItem()), pageable, false)).`when`(menuRepository).findByTasteTags(tastes, pageable)
+        doReturn(SliceImpl(listOf(menuItem()), pageable, false)).`when`(menuRepository).findDistinctByTasteTags_NameIn(tastes, pageable)
         val result = requireNotNull(service.getRecommendedMenuItems(tastes).collectList().block())
         assertEquals(listOf(7), result.map { it.idPosition })
         assertEquals(listOf("SOUR", "SWEET"), result.single().tasteTags)
