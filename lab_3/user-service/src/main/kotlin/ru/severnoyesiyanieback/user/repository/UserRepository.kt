@@ -7,6 +7,8 @@ import reactor.core.publisher.Mono
 import ru.severnoyesiyanieback.user.entity.User
 
 interface UserRepository : ReactiveCrudRepository<User, Int> {
+    fun findByEmail(email: String): Mono<User>
+
     @Query("SELECT * FROM users WHERE id_user = :userId FOR UPDATE")
     fun findByIdForUpdate(@Param("userId") userId: Int): Mono<User>
 }

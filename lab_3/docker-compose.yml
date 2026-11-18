@@ -59,6 +59,9 @@ services:
       CONFIG_SERVER_URL: http://config-service:8888
       EUREKA_URL: http://discovery-service:8761/eureka/
       EUREKA_HOSTNAME: user-service
+      APP_JWT_SECRET: "${LAB3_JWT_SECRET:?Set LAB3_JWT_SECRET}"
+      APP_LORD_EMAIL: "${LAB3_LORD_EMAIL:?Set LAB3_LORD_EMAIL}"
+      APP_LORD_PASSWORD: "${LAB3_LORD_PASSWORD:?Set LAB3_LORD_PASSWORD}"
       DB_USERNAME: users
       DB_PASSWORD: users
       R2DBC_URL: r2dbc:postgresql://users-db:5432/users

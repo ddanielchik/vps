@@ -7,7 +7,7 @@ spring:
             - id: users
               uri: lb://user-service
               predicates:
-                - Path=/api/v1/users/**
+                - Path=/api/v1/users/**,/api/v1/auth/login
             - id: menu
               uri: lb://menu-service
               predicates:

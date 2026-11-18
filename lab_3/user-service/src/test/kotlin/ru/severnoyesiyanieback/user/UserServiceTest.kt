@@ -9,6 +9,7 @@ import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoInteractions
 import org.mockito.Mockito.verifyNoMoreInteractions
 import org.springframework.dao.DuplicateKeyException
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.transaction.ReactiveTransaction
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.TransactionDefinition
@@ -30,6 +31,7 @@ class UserServiceTest {
     private val repository = mock(UserRepository::class.java)
     private val transactionManager = mock(ReactiveTransactionManager::class.java)
     private val transaction = mock(ReactiveTransaction::class.java)
+    private val encoder = mock(PasswordEncoder::class.java)
     private val service: UserService
 
     init {
@@ -37,16 +39,17 @@ class UserServiceTest {
             .getReactiveTransaction(any(TransactionDefinition::class.java))
         doReturn(Mono.empty<Void>()).`when`(transactionManager).commit(transaction)
         doReturn(Mono.empty<Void>()).`when`(transactionManager).rollback(transaction)
-        service = UserService(repository, transactionManager)
+        doReturn("hashed-password").`when`(encoder).encode("strong example password")
+        service = UserService(repository, transactionManager, encoder)
     }
 
     @Test
-    fun `create is deferred and assigns the client role`() {
-        val newUser = User(name = "Anna", email = "anna@example.com")
+    fun `create is deferred and stores a password hash for the client`() {
+        val newUser = User(name = "Anna", email = "anna@example.com", passwordHash = "hashed-password")
         doReturn(Mono.just(newUser.copy(idUser = 42))).`when`(repository).save(newUser)
 
-        val result = service.createUser(CreateUserRequest(newUser.name, newUser.email))
-        verifyNoInteractions(repository)
+        val result = service.createUser(CreateUserRequest(newUser.name, newUser.email, "strong example password"))
+        verifyNoInteractions(repository, encoder)
         StepVerifier.create(result)
             .expectNext(UserResponse(42, newUser.name, newUser.email, UserRole.CLIENT))
             .verifyComplete()
@@ -54,9 +57,9 @@ class UserServiceTest {
 
     @Test
     fun `unique constraint failure becomes an email conflict`() {
-        val newUser = User(name = "Anna", email = "taken@example.com")
+        val newUser = User(name = "Anna", email = "taken@example.com", passwordHash = "hashed-password")
         doReturn(Mono.error<User>(DuplicateKeyException("users_email_key"))).`when`(repository).save(newUser)
-        StepVerifier.create(service.createUser(CreateUserRequest(newUser.name, newUser.email)))
+        StepVerifier.create(service.createUser(CreateUserRequest(newUser.name, newUser.email, "strong example password")))
             .expectErrorMatches { it is UserAlreadyExistsException && it.message!!.contains(newUser.email) }
             .verify()
     }

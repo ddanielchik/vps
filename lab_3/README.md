@@ -1,4 +1,36 @@
-# Лабораторная работа №2
+# Лабораторная работа №3
+
+## Вход и создание пользователей
+
+`POST /api/v1/auth/login` выдаёт JWT после проверки email и пароля. `POST /api/v1/users` принимает `Authorization: Bearer <token>` и проверяет, что текущий пользователь имеет роль `LORD` и статус `ACTIVE`. Новый пользователь получает роль `CLIENT`.
+
+| Где | Что реализовано |
+| --- | --- |
+| [`AuthController`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/controller/AuthController.kt) и [`AuthService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/AuthService.kt) | Вход, проверка статуса и пароля, выпуск JWT на 30 минут. |
+| [`SecurityConfig`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/security/SecurityConfig.kt) | Spring Security проверяет подпись и срок JWT. Для создания пользователя роль и статус проверяются по текущей записи в БД. |
+| [`UserService`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/service/UserService.kt) и [миграция Flyway](user-service/src/main/resources/db/migration/V3__add_password_hash.sql) | Хранение хэша PBKDF2. Ответы API содержат поля профиля. |
+| [`LordBootstrap`](user-service/src/main/kotlin/ru/severnoyesiyanieback/user/security/LordBootstrap.kt) | Создание первого `LORD` при старте из параметров запуска. |
+
+### Настройка Compose
+
+Сгенерируйте ключ командой `openssl rand -hex 32`. Создайте локальный файл `lab_3/.env` и подставьте ключ и свой пароль. Пароль должен содержать от 15 до 128 символов.
+
+```dotenv
+LAB3_JWT_SECRET='вставьте результат openssl'
+LAB3_LORD_EMAIL=lord@example.com
+LAB3_LORD_PASSWORD='вставьте свою парольную фразу'
+```
+
+Войдите с указанным email и паролем. При повторном запуске с тем же email сохраняется существующий аккаунт и его текущий пароль. При подключении к существующей БД второй лабы старые аккаунты без хэша получают `401` при входе.
+
+### Проверка авторизации в Swagger
+
+1. Откройте **Пользователи → POST /api/v1/auth/login**. В теле передайте `email` и `password` из `.env`. При верных данных ответ `200` содержит `accessToken`. При неверном пароле ожидается `401`.
+2. Вызовите **POST /api/v1/users** без авторизации. Ожидается `401`.
+3. Нажмите **Authorize** в Swagger, вставьте только значение `accessToken` и повторите запрос с именем, email и паролем из [примера ниже](#1-создать-пользователя). Ожидается `201`, роль `CLIENT` и данные профиля.
+4. Войдите с данными созданного клиента. В **Authorize** замените токен супервайзера на токен клиента и повторите создание пользователя. Ожидается `403`.
+
+## Основа из лабораторной №2
 
 Декомпозировать на микросервисы разработанную систему из лабораторной работы 1.
 
@@ -50,12 +82,12 @@
 
 ## Быстрый запуск
 
-Запустите Docker Desktop. Из корня репозитория выполните:
+Запустите Docker Desktop и заполните `lab_3/.env` по инструкции выше. Стенд использует порты `8080` и `8761`. Из корня репозитория выполните:
 
 ```bash
-cd lab_2
-docker compose -p lab2 up -d --build
-docker compose -p lab2 ps
+cd lab_3
+docker compose -p lab3 up -d --build
+docker compose -p lab3 ps
 ```
 
 | Куда зайти | Что проверить |
@@ -66,10 +98,10 @@ docker compose -p lab2 ps
 После старта дайте сервисам зарегистрироваться и обновить кэш Eureka. Если Swagger возвращает `503`, сначала проверьте регистрацию и логи.
 
 ```bash
-docker compose -p lab2 logs --tail=80 api-gateway discovery-service
+docker compose -p lab3 logs --tail=80 api-gateway discovery-service
 ```
 
-Чтобы остановить стенд с сохранением данных, выполните `docker compose -p lab2 down`. Для работы с кодом откройте [родительский POM](pom.xml) как Maven-проект в IntelliJ IDEA и выберите JDK 21.
+Чтобы остановить стенд с сохранением данных, выполните `docker compose -p lab3 down`. Для работы с кодом откройте [родительский POM](pom.xml) как Maven-проект в IntelliJ IDEA и выберите JDK 21.
 
 ## Архитектура
 
@@ -109,7 +141,7 @@ flowchart LR
 Config Server работает на внутреннем порту `8888`. Посмотреть, что он отдаёт клиенту, можно из контейнера:
 
 ```bash
-docker compose -p lab2 exec config-service curl -fsS http://localhost:8888/discovery-service/default
+docker compose -p lab3 exec config-service curl -fsS http://localhost:8888/discovery-service/default
 ```
 
 В ответе `propertySources` содержит настройки `discovery-service`, в том числе порт `8761`.
@@ -120,12 +152,13 @@ docker compose -p lab2 exec config-service curl -fsS http://localhost:8888/disco
 
 ### 1. Создать пользователя
 
-В «Пользователи» вызовите `POST /api/v1/users`.
+В «Пользователи» войдите как `LORD` и вставьте токен через **Authorize**. Затем вызовите `POST /api/v1/users`.
 
 ```json
 {
   "name": "Анна",
-  "email": "anna@example.com"
+  "email": "anna@example.com",
+  "password": "test customer password phrase"
 }
 ```
 
@@ -161,7 +194,7 @@ docker compose -p lab2 exec config-service curl -fsS http://localhost:8888/disco
 Для заказа нужны действующие сотрудники с ролями `WAITER` и `WORKER`. Их можно подготовить один раз в локальной БД. Команда выведет `id_user` каждого сотрудника.
 
 ```bash
-docker compose -p lab2 exec -T users-db psql -U users -d users <<'SQL'
+docker compose -p lab3 exec -T users-db psql -U users -d users <<'SQL'
 INSERT INTO users (name, email, role)
 VALUES ('Waiter', 'waiter@bar.local', 'WAITER'),
        ('Worker', 'worker@bar.local', 'WORKER')
@@ -190,13 +223,13 @@ SQL
 Оставьте посещение открытым с сохранёнными вкусами. Выполните `GET /api/v1/visits/{id}/recommendations` и убедитесь, что ответ `200`. Затем остановите сервис из терминала:
 
 ```bash
-docker compose -p lab2 stop menu-service
+docker compose -p lab3 stop menu-service
 ```
 
 Повторите тот же запрос в Swagger несколько раз. Ожидается `503 Service Unavailable`. Запустите меню обратно:
 
 ```bash
-docker compose -p lab2 start menu-service
+docker compose -p lab3 start menu-service
 ```
 
 Дождитесь статуса `UP` в Eureka и обновления реестра у клиентов, затем повторите запрос. Ожидается `200` с коктейлями. Swagger показывает HTTP-результат, а переходы Circuit Breaker и количество обращений к сервису проверяет [FeignCircuitBreakerIT](visit-order-service/src/test/kotlin/ru/severnoyesiyanieBack/integration/FeignCircuitBreakerIT.kt).
@@ -219,7 +252,7 @@ docker compose -p lab2 start menu-service
 
 ## Автоматические тесты
 
-Из `lab_2` с JDK 21 и работающим Docker:
+Из `lab_3` с JDK 21 и работающим Docker:
 
 ```bash
 ./mvnw clean verify
@@ -228,7 +261,7 @@ docker compose -p lab2 start menu-service
 Для запуска из Maven-контейнера:
 
 ```bash
-docker compose -p lab2-tests -f compose.test.yml run --rm tests
+docker compose -p lab3-tests -f compose.test.yml run --rm tests
 ```
 
 Surefire запускает модульные тесты, Failsafe — интеграционные с PostgreSQL в Testcontainers. На этапе `verify` JaCoCo проверяет минимум **70% покрытия строк и инструкций** в каждом бизнес-модуле. HTML-отчёт создаётся в `target/site/jacoco/index.html` внутри `user-service`, `menu-service` и `visit-order-service`.

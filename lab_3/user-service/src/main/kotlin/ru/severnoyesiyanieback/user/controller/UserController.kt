@@ -1,6 +1,6 @@
 package ru.severnoyesiyanieback.user.controller
 
-import io.swagger.v3.oas.annotations.Operation
+import io.swagger.v3.oas.annotations.security.SecurityRequirement
 import jakarta.validation.Valid
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.DeleteMapping
@@ -23,6 +23,7 @@ import ru.severnoyesiyanieback.user.service.UserService
 @RequestMapping("/api/v1/users")
 class UserController(private val userService: UserService) {
     @PostMapping
+    @SecurityRequirement(name = "bearerAuth")
     @ResponseStatus(HttpStatus.CREATED)
     fun createUser(@Valid @RequestBody request: CreateUserRequest): Mono<UserResponse> =
         userService.createUser(request)

@@ -24,5 +24,6 @@ data class User(
     val email: String,
 
     val role: UserRole = UserRole.CLIENT,
-    val status: UserStatus = UserStatus.ACTIVE
+    val status: UserStatus = UserStatus.ACTIVE,
+    val passwordHash: String? = null
 )

@@ -8,5 +8,7 @@ data class CreateUserRequest(
     @field:NotBlank @field:Size(max = 50)
     val name: String,
     @field:NotBlank @field:Email @field:Size(max = 100)
-    val email: String
+    val email: String,
+    @field:NotBlank @field:Size(min = 15, max = 128)
+    val password: String
 )

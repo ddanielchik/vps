@@ -28,7 +28,7 @@ class UserValidationTest {
     fun `requests and entities retain the original length and blank constraints`() {
         Validation.buildDefaultValidatorFactory().use { factory ->
             val invalid = listOf(
-                CreateUserRequest("", "invalid"),
+                CreateUserRequest("", "invalid", "strong example password"),
                 UpdateUserRequest("x".repeat(51), "x".repeat(101)),
                 User(name = " ", email = " ")
             )

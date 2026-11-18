@@ -1,11 +1,13 @@
 package ru.severnoyesiyanieback.user.service
 
 import org.springframework.dao.DuplicateKeyException
+import org.springframework.security.crypto.password.PasswordEncoder
 import org.springframework.stereotype.Service
 import org.springframework.transaction.ReactiveTransactionManager
 import org.springframework.transaction.reactive.TransactionalOperator
 import reactor.core.publisher.Flux
 import reactor.core.publisher.Mono
+import reactor.core.scheduler.Schedulers
 import ru.severnoyesiyanieback.user.dto.CreateUserRequest
 import ru.severnoyesiyanieback.user.dto.UpdateUserRequest
 import ru.severnoyesiyanieback.user.dto.UserResponse
@@ -18,14 +20,19 @@ import ru.severnoyesiyanieback.user.repository.UserRepository
 @Service
 class UserService(
     private val userRepository: UserRepository,
-    transactionManager: ReactiveTransactionManager
+    transactionManager: ReactiveTransactionManager,
+    private val passwordEncoder: PasswordEncoder
 ) {
     private val transactions = TransactionalOperator.create(transactionManager)
 
-    fun createUser(request: CreateUserRequest): Mono<UserResponse> = Mono.defer {
-        userRepository.save(User(name = request.name, email = request.email))
-    }.map(::toResponse)
-        .onErrorMap(DuplicateKeyException::class.java) { UserAlreadyExistsException(request.email) }
+    fun createUser(request: CreateUserRequest): Mono<UserResponse> =
+        Mono.fromCallable { passwordEncoder.encode(request.password) }
+            .subscribeOn(Schedulers.boundedElastic())
+            .flatMap { passwordHash ->
+                userRepository.save(User(name = request.name, email = request.email, passwordHash = passwordHash))
+            }
+            .map(::toResponse)
+            .onErrorMap(DuplicateKeyException::class.java) { UserAlreadyExistsException(request.email) }
 
     fun getAllUsers(): Flux<UserResponse> = Flux.defer { userRepository.findAll() }.map(::toResponse)
 
