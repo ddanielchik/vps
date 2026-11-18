@@ -1,5 +1,6 @@
 package ru.severnoyesiyanieBack.service
 
+import java.time.LocalDateTime
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.PageRequest
 import org.springframework.data.domain.Sort
@@ -7,21 +8,22 @@ import org.springframework.http.HttpStatus
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import org.springframework.web.server.ResponseStatusException
+import ru.severnoyesiyanieBack.client.MenuClient
+import ru.severnoyesiyanieBack.client.UserClient
+import ru.severnoyesiyanieBack.client.awaitResponse
 import ru.severnoyesiyanieBack.dto.CreateVisitRequest
+import ru.severnoyesiyanieBack.dto.MenuItemResponse
 import ru.severnoyesiyanieBack.dto.UpdateVisitRequest
 import ru.severnoyesiyanieBack.dto.VisitPreferencesRequest
 import ru.severnoyesiyanieBack.dto.VisitResponse
-import ru.severnoyesiyanieBack.entity.Visit
 import ru.severnoyesiyanieBack.entity.TastePreference
-import ru.severnoyesiyanieBack.client.UserClient
-import ru.severnoyesiyanieBack.client.MenuClient
 import ru.severnoyesiyanieBack.entity.UserStatus
+import ru.severnoyesiyanieBack.entity.Visit
 import ru.severnoyesiyanieBack.entity.VisitStatus
 import ru.severnoyesiyanieBack.exception.TasteTagsNotFoundException
 import ru.severnoyesiyanieBack.exception.VisitAlreadyClosedException
 import ru.severnoyesiyanieBack.exception.VisitNotFoundException
 import ru.severnoyesiyanieBack.repository.VisitRepository
-import java.time.LocalDateTime
 
 @Service
 class VisitService(
@@ -29,20 +31,13 @@ class VisitService(
     private val userClient: UserClient,
     private val menuClient: MenuClient
 ) {
-
     @Transactional(readOnly = true)
-    fun getVisitById(id: Int): VisitResponse {
-
-        val visit = visitRepository.findById(id)
-            .orElseThrow { VisitNotFoundException(id) }
-
-        return toResponse(visit)
-    }
+    fun getVisitById(id: Int): VisitResponse = toResponse(findVisit(id))
 
     @Transactional
     fun openVisit(request: CreateVisitRequest): VisitResponse {
 
-        val client = userClient.getUser(request.clientId)
+        val client = userClient.getUser(request.clientId).awaitResponse()
         if (client.status == UserStatus.BLOCKED) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "Blocked users cannot open visits")
         }
@@ -63,12 +58,7 @@ class VisitService(
         request: UpdateVisitRequest
     ): VisitResponse {
 
-        val visit = visitRepository.findById(id)
-            .orElseThrow { VisitNotFoundException(id) }
-
-        if (visit.status != VisitStatus.OPEN) {
-            throw VisitAlreadyClosedException(id)
-        }
+        val visit = findOpenVisit(id)
 
         visit.tableNumber = request.tableNumber
 
@@ -101,12 +91,7 @@ class VisitService(
     @Transactional
     fun closeVisit(id: Int): VisitResponse {
 
-        val visit = visitRepository.findById(id)
-            .orElseThrow { VisitNotFoundException(id) }
-
-        if (visit.status != VisitStatus.OPEN) {
-            throw VisitAlreadyClosedException(id)
-        }
+        val visit = findOpenVisit(id)
 
         visit.status = VisitStatus.CLOSED
         visit.closedAt = LocalDateTime.now()
@@ -121,14 +106,13 @@ class VisitService(
         request: VisitPreferencesRequest
     ): VisitResponse {
 
-        val visit = visitRepository.findById(id)
-            .orElseThrow { VisitNotFoundException(id) }
+        val visit = findOpenVisit(id)
 
-        if (visit.status != VisitStatus.OPEN) {
-            throw VisitAlreadyClosedException(id)
+        val tags = if (request.tasteTagIds.isEmpty()) {
+            emptyList()
+        } else {
+            menuClient.getTags(request.tasteTagIds).awaitResponse()
         }
-
-        val tags = if (request.tasteTagIds.isEmpty()) emptyList() else menuClient.getTags(request.tasteTagIds)
 
         if (tags.size != request.tasteTagIds.size) {
             throw TasteTagsNotFoundException()
@@ -138,6 +122,23 @@ class VisitService(
         visit.tastePreferences.addAll(tags.map { TastePreference(it.idTag, it.name) })
 
         return toResponse(visitRepository.save(visit))
+    }
+
+    @Transactional(readOnly = true)
+    fun getRecommendations(visitId: Int): List<MenuItemResponse> {
+        val visit = findOpenVisit(visitId)
+        val preferredTastes = visit.tastePreferences.map { it.name }.toSet()
+        if (preferredTastes.isEmpty()) return emptyList()
+        return menuClient.getRecommendations(preferredTastes).awaitResponse()
+    }
+
+    private fun findVisit(id: Int): Visit = visitRepository.findById(id)
+        .orElseThrow { VisitNotFoundException(id) }
+
+    private fun findOpenVisit(id: Int): Visit {
+        val visit = findVisit(id)
+        if (visit.status != VisitStatus.OPEN) throw VisitAlreadyClosedException(id)
+        return visit
     }
 
     private fun toResponse(visit: Visit): VisitResponse = VisitResponse.Builder()

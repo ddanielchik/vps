@@ -5,29 +5,20 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/visits}
     username: ${DB_USERNAME:visits}
     password: ${DB_PASSWORD:visits}
-  cloud:
-    openfeign:
-      circuitbreaker:
-        enabled: true
-      client:
-        config:
-          default:
-            connectTimeout: 1000
-            readTimeout: 2000
-    circuitbreaker:
-      resilience4j:
-        disable-thread-pool: true
   jpa:
     open-in-view: false
     hibernate:
       ddl-auto: validate
 resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 2s
   circuitbreaker:
     configs:
       default:
         slidingWindowSize: 10
         minimumNumberOfCalls: 5
-        failureRateThreshold: 50
         waitDurationInOpenState: 10s
         permittedNumberOfCallsInHalfOpenState: 2
         ignoreExceptions:

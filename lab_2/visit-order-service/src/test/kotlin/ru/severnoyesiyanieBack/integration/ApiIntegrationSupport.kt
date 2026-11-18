@@ -23,14 +23,14 @@ import tools.jackson.databind.ObjectMapper
 @SpringBootTest(properties = [
     "spring.config.name=application-test", "spring.cloud.config.enabled=false", "eureka.client.enabled=false",
     "spring.cloud.discovery.enabled=false", "spring.jpa.hibernate.ddl-auto=validate", "spring.jpa.open-in-view=false",
-    "spring.cloud.openfeign.circuitbreaker.enabled=true",
-    "spring.cloud.circuitbreaker.resilience4j.disable-thread-pool=true",
+    "reactive.feign.java11=true",
     "resilience4j.circuitbreaker.configs.default.slidingWindowSize=2",
     "resilience4j.circuitbreaker.configs.default.minimumNumberOfCalls=2",
     "resilience4j.circuitbreaker.configs.default.permittedNumberOfCallsInHalfOpenState=1",
     "resilience4j.circuitbreaker.configs.default.ignoreExceptions[0]=ru.severnoyesiyanieBack.client.RemoteBusinessException",
-    "spring.cloud.openfeign.client.config.default.connectTimeout=1000",
-    "spring.cloud.openfeign.client.config.default.readTimeout=1000"
+    "reactive.feign.client.config.default.options.connect-timeout-millis=1000",
+    "reactive.feign.client.config.default.options.request-timeout-millis=2000",
+    "resilience4j.timelimiter.configs.default.timeoutDuration=2s"
 ])
 @AutoConfigureMockMvc
 @Import(TestcontainersConfiguration::class)
@@ -55,7 +55,7 @@ abstract class ApiIntegrationSupport {
         remote.createMenu(name, price.toBigDecimal(), tags.split(',').filter(String::isNotBlank).map(String::toInt).toSet())
 
     protected fun createVisit(clientId: Int = createClient()): Int = json(mockMvc.perform(
-        post("/api/visits").contentType(MediaType.APPLICATION_JSON)
+        post("/api/v1/visits").contentType(MediaType.APPLICATION_JSON)
             .content("""{"clientId":$clientId,"tableNumber":4}""")
     ).andExpect(status().isCreated))["idVisit"].asInt()
 

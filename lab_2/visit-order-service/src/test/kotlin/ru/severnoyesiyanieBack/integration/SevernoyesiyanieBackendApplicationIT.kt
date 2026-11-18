@@ -14,7 +14,7 @@ class SevernoyesiyanieBackendApplicationIT : ApiIntegrationSupport() {
 
     @Test
     fun `application owns only visits orders and their local associations`() {
-        assertEquals(listOf("1"), flyway.info().applied().map { it.version.toString() })
+        assertEquals(listOf("1", "2"), flyway.info().applied().map { it.version.toString() })
         assertTrue(flyway.validateWithResult().validationSuccessful)
         assertEquals(4, jdbc.queryForObject("""
             SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'
@@ -27,13 +27,13 @@ class SevernoyesiyanieBackendApplicationIT : ApiIntegrationSupport() {
     }
 
     @Test
-    fun `OpenAPI exposes visit order and protected deletion routes`() {
+    fun `OpenAPI exposes v1 visit order and reference check routes`() {
         mockMvc.perform(get("/v3/api-docs"))
             .andExpect(status().isOk)
-            .andExpect(jsonPath("$.paths['/api/visits']").exists())
-            .andExpect(jsonPath("$.paths['/api/orders']").exists())
-            .andExpect(jsonPath("$.paths['/api/users/{userId}'].delete").exists())
-            .andExpect(jsonPath("$.paths['/api/menu/{idPosition}'].delete").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/visits']").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/orders']").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/orders/references/users/{id}'].get").exists())
+            .andExpect(jsonPath("$.paths['/api/v1/orders/references/menu/{id}'].get").exists())
             .andExpect(jsonPath("$.servers[0].url").value("/"))
     }
 }

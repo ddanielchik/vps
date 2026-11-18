@@ -4,3 +4,17 @@ eureka:
       defaultZone: ${EUREKA_URL:http://localhost:8761/eureka/}
   instance:
     hostname: ${EUREKA_HOSTNAME:localhost}
+---
+spring:
+  config:
+    activate:
+      on-profile: reactive-feign
+reactive:
+  feign:
+    java11: true
+    client:
+      config:
+        default:
+          options:
+            connect-timeout-millis: 1000
+            request-timeout-millis: 2000
