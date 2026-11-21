@@ -1,0 +1,7 @@
+spring:
+  application:
+    name: menu-service
+  profiles:
+    include: reactive-feign
+  config:
+    import: "configserver:${CONFIG_SERVER_URL:http://localhost:8888}"

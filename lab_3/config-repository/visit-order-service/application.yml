@@ -1,0 +1,25 @@
+server:
+  port: 8083
+spring:
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/visits}
+    username: ${DB_USERNAME:visits}
+    password: ${DB_PASSWORD:visits}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+resilience4j:
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 2s
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 2
+        ignoreExceptions:
+          - ru.severnoyesiyanieBack.client.RemoteBusinessException

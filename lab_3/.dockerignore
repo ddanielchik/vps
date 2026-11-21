@@ -1,0 +1,12 @@
+**/target/
+**/.idea/
+.git/
+*.iml
+.DS_Store
+.env
+*.log
+README.md
+config-repository/
+.env.example
+docker-compose.yml
+compose.test.yml

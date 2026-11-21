@@ -1,0 +1,46 @@
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: users
+              uri: lb://user-service
+              predicates:
+                - Path=/api/v1/users/**,/api/v1/auth/login
+            - id: menu
+              uri: lb://menu-service
+              predicates:
+                - Path=/api/v1/menu/**
+            - id: visits-orders
+              uri: lb://visit-order-service
+              predicates:
+                - Path=/api/v1/visits/**,/api/v1/orders/**
+            - id: users-openapi
+              uri: lb://user-service
+              predicates:
+                - Path=/openapi/users
+              filters:
+                - SetPath=/v3/api-docs
+            - id: menu-openapi
+              uri: lb://menu-service
+              predicates:
+                - Path=/openapi/menu
+              filters:
+                - SetPath=/v3/api-docs
+            - id: visits-orders-openapi
+              uri: lb://visit-order-service
+              predicates:
+                - Path=/openapi/visits-orders
+              filters:
+                - SetPath=/v3/api-docs
+springdoc:
+  swagger-ui:
+    disable-swagger-default-url: true
+    urls:
+      - name: Пользователи
+        url: /openapi/users
+      - name: Меню
+        url: /openapi/menu
+      - name: Посещения и заказы
+        url: /openapi/visits-orders
